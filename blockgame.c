@@ -1,17 +1,26 @@
 #include "raylib.h"
-#include <minwindef.h>
+#include <stdbool.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
 
 #define CEIL_DIV(x, y) (((x) + (y) - 1) / (y))
+#define ARRAY_LENGTH(x) (sizeof(x) / sizeof((x)[0]))
 
 #define ROWS 9
 #define COLS 9
-const int pieceLength = 3;
-const int numberOfShapes = 3;
-const int piecesPerGridLength = ROWS / pieceLength;
-const int numberOfROWSOfPieces = CEIL_DIV(numberOfShapes, piecesPerGridLength);
+#define PIECE_LENGTH 3
+#define NUM_PIECES 3
+const int piecesPerGridLength = ROWS / PIECE_LENGTH;
+const int numberOfROWSOfPieces = CEIL_DIV(NUM_PIECES, piecesPerGridLength);
 const double windowSize = 0.8;
 const double squareAmount = 0.95;
+const int squareProbability = 35;
 int squareLength;
+
+Color palette[] = {MAROON, ORANGE, DARKGREEN, DARKBLUE, DARKPURPLE, DARKBROWN,
+                   RED,    GOLD,   LIME,      BLUE,     VIOLET,     BROWN,
+                   PINK,   YELLOW, GREEN,     SKYBLUE,  PURPLE,     BEIGE};
 
 int CalculateSquareSize() {
   const int screenWidth = GetMonitorWidth(GetCurrentMonitor());
@@ -20,6 +29,16 @@ int CalculateSquareSize() {
   int maxWide = screenWidth / (COLS + numberOfROWSOfPieces);
   return (maxTall < maxWide ? maxTall : maxWide) * windowSize;
 }
+
+typedef Color Grid[COLS][ROWS];
+typedef bool Shape[PIECE_LENGTH][PIECE_LENGTH];
+
+typedef struct Piece {
+  Color color;
+  Shape shape;
+} Piece;
+
+typedef Piece Pieces[NUM_PIECES];
 
 typedef struct CanvasPos {
   int x;
@@ -31,9 +50,19 @@ typedef struct GridPos {
   int y;
 } GridPos;
 
-CanvasPos GridToCanvas(GridPos gPos) { return (CanvasPos){gPos.x, gPos.y}; }
+CanvasPos GridToCanvas(GridPos gp) {
+  return (CanvasPos){gp.x * squareLength, gp.y * squareLength};
+}
+Rectangle GridToRectangle(GridPos gp) {
+  CanvasPos cp = GridToCanvas(gp);
+  return (Rectangle){cp.x, cp.y, squareLength * squareAmount,
+                     squareLength * squareAmount};
+}
+GridPos CanvasToGrid(CanvasPos cp) {
+  return (GridPos){cp.x / squareLength, cp.y / squareLength};
+}
 
-void GridInit(Color grid[COLS][ROWS]) {
+void GridInit(Grid grid) {
   for (int col = 0; col != COLS; col++) {
     for (int row = 0; row != ROWS; row++) {
       grid[col][row] = (Color){30, 30, 30, 255};
@@ -41,32 +70,103 @@ void GridInit(Color grid[COLS][ROWS]) {
   }
 }
 
-int main(void) {
+void RenderGrid(Grid grid) {
+  for (int col = 0; col < COLS; col++) {
+    for (int row = 0; row < ROWS; row++) {
+      Rectangle rec = GridToRectangle((GridPos){col, row});
+      Color c = grid[col][row];
+      DrawRectangleRec(rec, c);
+    }
+  }
+}
 
+bool IsTopRowEmpty(Shape shape) {
+  for (int col = 0; col != PIECE_LENGTH; col++)
+    if (shape[col][0])
+      return false;
+  return true;
+}
+bool IsLeftColEmpty(Shape shape) {
+  for (int row = 0; row != PIECE_LENGTH; row++)
+    if (shape[0][row])
+      return false;
+  return true;
+}
+
+void RemoveTopRow(Shape shape) {
+  for (int row = 0; row != PIECE_LENGTH - 1; row++) {
+    for (int col = 0; col != PIECE_LENGTH; col++) {
+      shape[col][row] = shape[col][row + 1];
+    }
+  }
+  for (int col = 0; col != PIECE_LENGTH; col++) {
+    shape[col][PIECE_LENGTH - 1] = false;
+  }
+}
+
+void RemoveLeftCol(Shape shape) {
+  for (int col = 0; col != PIECE_LENGTH - 1; col++) {
+    for (int row = 0; row != PIECE_LENGTH; row++) {
+      shape[col][row] = shape[col + 1][row];
+    }
+  }
+  for (int row = 0; row != PIECE_LENGTH; row++) {
+    shape[PIECE_LENGTH - 1][row] = false;
+  }
+}
+
+      // printf("ptr=%p col=%d row=%d rnd=%d b=%d\n", (void*)&piece->shape[col][row], col, row, rnd, b);
+void BuildPiece(Piece* piece) {
+  for (int col = 0; col < PIECE_LENGTH; col++) {
+    for (int row = 0; row < PIECE_LENGTH; row++) {
+      int rnd = rand() % 100;
+      bool b = rnd < squareProbability;
+      piece->shape[col][row] = b;
+    }
+  }
+  while (IsTopRowEmpty(piece->shape)) {
+    RemoveTopRow(piece->shape);
+  }
+  while (IsLeftColEmpty(piece->shape)) {
+    RemoveLeftCol(piece->shape);
+  }
+  piece->color = palette[rand() % ARRAY_LENGTH(palette)];
+}
+
+void BuildPieces(Pieces pieces) {
+  for (int i = 0; i != NUM_PIECES; i++) {
+    BuildPiece(&pieces[i]);
+    // printf("\nShape %d %p\n", i, (void*)&pieces[i]);
+    // for (int row = 0; row != PIECE_LENGTH; row++) {
+    //   for (int col = 0; col != PIECE_LENGTH; col++) {
+    //     printf("%s ", pieces[i].shape[col][row] ? "X" : " ");
+    //   }
+    //   printf("\n");
+    // }
+  }
+}
+
+int main(void) {
+  srand(time(NULL));
   InitWindow(900, 690, "BlockGame");
   squareLength = CalculateSquareSize();
-  SetWindowSize(squareLength * (COLS + numberOfROWSOfPieces * pieceLength),
+  SetWindowSize(squareLength * (COLS + numberOfROWSOfPieces * PIECE_LENGTH),
                 squareLength * ROWS);
   SetTargetFPS(60);
 
-  Color grid[COLS][ROWS];
+  Grid grid;
+  Pieces pieces;
+  bool stop = false;
   GridInit(grid);
-  while (!WindowShouldClose()) {
+  while (!WindowShouldClose() && !stop) {
 
     BeginDrawing();
-    ClearBackground((Color){46,46,46,255});
-
-    for (int col = 0; col < COLS; col++) {
-      for (int row = 0; row < ROWS; row++) {
-        Rectangle rec = {col * squareLength, row * squareLength,
-                         squareLength * squareAmount, squareLength * squareAmount};
-        Color c = grid[col][row];
-        DrawRectangleRec(rec, c);
-      }
-    }
-
-    DrawText("Congrats! You created your first window!", 190, 200, 20,
-             LIGHTGRAY);
+    ClearBackground((Color){46, 46, 46, 255});
+    RenderGrid(grid);
+    BuildPieces(pieces);
+    stop = true;
+    // DrawText("Congrats! You created your first window!", 190, 200, 20,
+    //          LIGHTGRAY);
 
     EndDrawing();
   }
