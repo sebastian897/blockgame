@@ -18,6 +18,8 @@ const double squareAmount = 0.95;
 const int squareProbability = 35;
 int squareLength;
 
+bool debug = true;
+
 Color palette[] = {MAROON, ORANGE, DARKGREEN, DARKBLUE, DARKPURPLE, DARKBROWN,
                    RED,    GOLD,   LIME,      BLUE,     VIOLET,     BROWN,
                    PINK,   YELLOW, GREEN,     SKYBLUE,  PURPLE,     BEIGE};
@@ -33,13 +35,6 @@ int CalculateSquareSize() {
 typedef Color Grid[COLS][ROWS];
 typedef bool Shape[PIECE_LENGTH][PIECE_LENGTH];
 
-typedef struct Piece {
-  Color color;
-  Shape shape;
-} Piece;
-
-typedef Piece Pieces[NUM_PIECES];
-
 typedef struct CanvasPos {
   int x;
   int y;
@@ -50,16 +45,31 @@ typedef struct GridPos {
   int y;
 } GridPos;
 
+typedef struct Piece {
+  Color color;
+  Shape shape;
+  bool dragging;
+  CanvasPos cpos;
+} Piece;
+
+typedef Piece Pieces[NUM_PIECES];
+
 CanvasPos GridToCanvas(GridPos gp) {
   return (CanvasPos){gp.x * squareLength, gp.y * squareLength};
 }
-Rectangle GridToRectangle(GridPos gp) {
-  CanvasPos cp = GridToCanvas(gp);
+Rectangle CanvasToRectangle(CanvasPos cp) {
   return (Rectangle){cp.x, cp.y, squareLength * squareAmount,
                      squareLength * squareAmount};
 }
+Rectangle GridToRectangle(GridPos gp) {
+  return CanvasToRectangle(GridToCanvas(gp));
+}
 GridPos CanvasToGrid(CanvasPos cp) {
   return (GridPos){cp.x / squareLength, cp.y / squareLength};
+}
+
+CanvasPos AddCanvasPos(CanvasPos cp1, CanvasPos cp2) {
+  return (CanvasPos){cp1.x + cp2.x, cp1.y + cp2.y};
 }
 
 void GridInit(Grid grid) {
@@ -115,8 +125,9 @@ void RemoveLeftCol(Shape shape) {
   }
 }
 
-      // printf("ptr=%p col=%d row=%d rnd=%d b=%d\n", (void*)&piece->shape[col][row], col, row, rnd, b);
-void BuildPiece(Piece* piece) {
+// printf("ptr=%p col=%d row=%d rnd=%d b=%d\n", (void*)&piece->shape[col][row],
+// col, row, rnd, b);
+void BuildPiece(Piece *piece) {
   for (int col = 0; col < PIECE_LENGTH; col++) {
     for (int row = 0; row < PIECE_LENGTH; row++) {
       int rnd = rand() % 100;
@@ -131,18 +142,50 @@ void BuildPiece(Piece* piece) {
     RemoveLeftCol(piece->shape);
   }
   piece->color = palette[rand() % ARRAY_LENGTH(palette)];
+  piece->dragging = false;
+}
+
+void ResetPiece(Piece *piece, int i) {
+  piece->cpos = GridToCanvas(
+      (GridPos){ (COLS + i / piecesPerGridLength * PIECE_LENGTH),
+                (i % piecesPerGridLength) * PIECE_LENGTH});
 }
 
 void BuildPieces(Pieces pieces) {
   for (int i = 0; i != NUM_PIECES; i++) {
     BuildPiece(&pieces[i]);
-    // printf("\nShape %d %p\n", i, (void*)&pieces[i]);
-    // for (int row = 0; row != PIECE_LENGTH; row++) {
-    //   for (int col = 0; col != PIECE_LENGTH; col++) {
-    //     printf("%s ", pieces[i].shape[col][row] ? "X" : " ");
+    ResetPiece(&pieces[i], i);
+    // if (debug) {
+    //   printf("\nShape %d %p\n", i, (void *)&pieces[i]);
+    //   for (int row = 0; row != PIECE_LENGTH; row++) {
+    //     for (int col = 0; col != PIECE_LENGTH; col++) {
+    //       printf("%s ", pieces[i].shape[col][row] ? "X" : " ");
+    //     }
+    //     printf("\n");
     //   }
-    //   printf("\n");
     // }
+  }
+}
+
+void DrawPieces(Pieces pieces) {
+  for (int i = 0; i != NUM_PIECES; i++) {
+    // if (debug) {
+    //   printf("piece# %d\n", i);
+    // }
+    for (int col = 0; col != PIECE_LENGTH; col++) {
+      for (int row = 0; row != PIECE_LENGTH; row++) {
+        if (pieces[i].shape[col][row]) {
+          CanvasPos cpos =
+              AddCanvasPos(pieces[i].cpos, GridToCanvas((GridPos){col, row}));
+        // if (debug) {
+        //   printf("canvas x,y %d,%d\n", cpos.x, cpos.y);
+        // }
+          Rectangle rec = CanvasToRectangle(cpos);
+          Color c = pieces[i].color;
+          DrawRectangleRec(rec, c);
+        }
+      }
+    }
   }
 }
 
@@ -156,6 +199,7 @@ int main(void) {
 
   Grid grid;
   Pieces pieces;
+  BuildPieces(pieces);
   bool stop = false;
   GridInit(grid);
   while (!WindowShouldClose() && !stop) {
@@ -163,8 +207,9 @@ int main(void) {
     BeginDrawing();
     ClearBackground((Color){46, 46, 46, 255});
     RenderGrid(grid);
-    BuildPieces(pieces);
-    stop = true;
+    DrawPieces(pieces);
+    debug = false;
+    // stop = true;
     // DrawText("Congrats! You created your first window!", 190, 200, 20,
     //          LIGHTGRAY);
 
