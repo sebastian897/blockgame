@@ -128,8 +128,6 @@ void RemoveLeftCol(Shape shape) {
   }
 }
 
-// printf("ptr=%p col=%d row=%d rnd=%d b=%d\n", (void*)&piece->shape[col][row],
-// col, row, rnd, b);
 void BuildPiece(Piece *piece) {
   for (int col = 0; col < piece_length; col++) {
     for (int row = 0; row < piece_length; row++) {
@@ -158,31 +156,16 @@ void BuildPieces(Pieces pieces) {
   for (int i = 0; i != num_pieces; i++) {
     BuildPiece(&pieces[i]);
     ResetPiece(&pieces[i], i);
-    // if (debug) {
-    //   printf("\nShape %d %p\n", i, (void *)&pieces[i]);
-    //   for (int row = 0; row != PIECE_LENGTH; row++) {
-    //     for (int col = 0; col != PIECE_LENGTH; col++) {
-    //       printf("%s ", pieces[i].shape[col][row] ? "X" : " ");
-    //     }
-    //     printf("\n");
-    //   }
-    // }
   }
 }
 
 void DrawPieces(Pieces pieces) {
   for (int i = 0; i != num_pieces; i++) {
-    // if (debug) {
-    //   printf("piece# %d\n", i);
-    // }
     for (int col = 0; col != piece_length; col++) {
       for (int row = 0; row != piece_length; row++) {
         if (pieces[i].shape[col][row]) {
           CanvasPos cpos =
               AddCanvasPos(pieces[i].cpos, GridToCanvas((GridPos){col, row}));
-          // if (debug) {
-          //   printf("canvas x,y %d,%d\n", cpos.x, cpos.y);
-          // }
           Rectangle rec = CanvasToRectangle(cpos);
           Color c = pieces[i].color;
           DrawRectangleRec(rec, c);
