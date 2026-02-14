@@ -1,5 +1,6 @@
 #include "raylib.h"
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <time.h>
 
@@ -21,10 +22,11 @@ const double squareAmount = 0.95;
 int squareLength;
 
 bool debug = true;
-
-Color palette[] = {MAROON, ORANGE, DARKGREEN, DARKBLUE, DARKPURPLE, DARKBROWN,
-                   RED,    GOLD,   LIME,      BLUE,     VIOLET,     BROWN,
-                   PINK,   YELLOW, GREEN,     SKYBLUE,  PURPLE,     BEIGE};
+#define EMPTY (Color){30, 30, 30, 255}
+Color palette[] = {EMPTY,      MAROON,    ORANGE, DARKGREEN, DARKBLUE,
+                   DARKPURPLE, DARKBROWN, RED,    GOLD,      LIME,
+                   BLUE,       VIOLET,    BROWN,  PINK,      YELLOW,
+                   GREEN,      SKYBLUE,   PURPLE, BEIGE};
 
 int CalculateSquareSize(void) {
   const int screenWidth = GetMonitorWidth(GetCurrentMonitor());
@@ -36,12 +38,7 @@ int CalculateSquareSize(void) {
 
 typedef bool Shape[piece_length][piece_length];
 
-typedef struct GridSquare {
-  bool empty;
-  Color color;
-} GridSquare;
-
-typedef GridSquare Grid[cols][rows];
+typedef uint8_t Grid[cols][rows];
 
 typedef struct CanvasPos {
   int x;
@@ -59,7 +56,7 @@ typedef struct Drag {
 } Drag;
 
 typedef struct Piece {
-  Color color;
+  uint8_t pal_idx;
   Shape shape;
   Drag drag;
 } Piece;
@@ -134,7 +131,7 @@ bool DoesShapeFit(GridPos gpos, const Piece *piece) {
 void GridInit(Grid grid) {
   for (int col = 0; col != cols; col++) {
     for (int row = 0; row != rows; row++) {
-      grid[col][row].empty = true;
+      grid[col][row] = 0; // empty index = 0
     }
   }
 }
@@ -144,11 +141,7 @@ void RenderGrid(Grid grid) {
     for (int row = 0; row != rows; row++) {
       Rectangle rec = GridToRectangle((GridPos){col, row});
       Color c;
-      if (grid[col][row].empty) {
-        c = (Color){30, 30, 30, 255};
-      } else {
-        c = grid[col][row].color;
-      }
+      c = palette[grid[col][row]];
       DrawRectangleRec(rec, c);
     }
   }
@@ -203,14 +196,14 @@ void BuildPiece(Piece *piece) {
   while (IsLeftColEmpty(piece->shape)) {
     RemoveLeftCol(piece->shape);
   }
-  piece->color = palette[rand() % ARRAY_LENGTH(palette)];
+  piece->pal_idx = rand() % (ARRAY_LENGTH(palette) - 1) + 1; // dont chose empty
   piece->drag.dragging = false;
 }
 
-CanvasPos ResetPiece(int i) {
+CanvasPos GetPieceHomePos(int piece_idx) {
   return GridToCanvas(
-      (GridPos){(cols + i / pieces_per_grid_length * piece_length),
-                (i % pieces_per_grid_length) * piece_length});
+      (GridPos){(cols + piece_idx / pieces_per_grid_length * piece_length),
+                (piece_idx % pieces_per_grid_length) * piece_length});
 }
 
 void BuildPieces(Pieces pieces) {
@@ -219,49 +212,53 @@ void BuildPieces(Pieces pieces) {
   }
 }
 
-void DrawShadow(const Piece *piece) {
+void DrawShadowRectangle(const Piece *piece, int col, int row) {
   CanvasPos mousePos = {GetMouseX() + squareLength / 2,
                         GetMouseY() + squareLength / 2};
   GridPos gpos = CanvasToGrid(SubCanvasPos(mousePos, piece->drag.cpos));
   if (!DoesShapeFit(gpos, piece))
     return;
+  if (piece->shape[col][row]) {
+    CanvasPos cpos = GridToCanvas(AddGridPos((GridPos){col, row}, gpos));
+    Color c = palette[piece->pal_idx];
+    c.a = 127;
+    DrawRectangleRec(CanvasToRectangle(cpos), c);
+  }
+}
+
+void DrawPiece(const Piece *piece, int i) {
+  CanvasPos mousePos = {GetMouseX(), GetMouseY()};
   for (int col = 0; col != piece_length; col++) {
     for (int row = 0; row != piece_length; row++) {
       if (piece->shape[col][row]) {
-        CanvasPos cpos = GridToCanvas(AddGridPos((GridPos){col, row}, gpos));
-        Rectangle rec = CanvasToRectangle(cpos);
-        Color c = piece->color;
-        c.a = 50;
-        DrawRectangleRec(rec, c);
+        if (piece->drag.dragging) {
+          DrawShadowRectangle(piece, col, row);
+          DrawRectangleRec(CanvasToRectangle(AddCanvasPos(
+                               SubCanvasPos(mousePos, piece->drag.cpos),
+                               GridToCanvas((GridPos){col, row}))),
+                           palette[piece->pal_idx]);
+        } else {
+          DrawRectangleRec(
+              CanvasToRectangle(AddCanvasPos(
+                  GetPieceHomePos(i), GridToCanvas((GridPos){col, row}))),
+              palette[piece->pal_idx]);
+        }
       }
     }
   }
 }
 
 void DrawPieces(Pieces pieces) {
-  CanvasPos mousePos = {GetMouseX(), GetMouseY()};
+  int drag_idx = -1;
   for (int i = 0; i != num_pieces; i++) {
-    for (int col = 0; col != piece_length; col++) {
-      for (int row = 0; row != piece_length; row++) {
-        CanvasPos cpos;
-        if (pieces[i].shape[col][row]) {
-          if (pieces[i].drag.dragging) {
-            DrawShadow(&pieces[i]);
-            cpos = AddCanvasPos(SubCanvasPos(mousePos, pieces[i].drag.cpos),
-                                GridToCanvas((GridPos){col, row}));
-            Rectangle rec = CanvasToRectangle(cpos);
-            Color c = pieces[i].color;
-            DrawRectangleRec(rec, c);
-          } else {
-            cpos =
-                AddCanvasPos(ResetPiece(i), GridToCanvas((GridPos){col, row}));
-            Rectangle rec = CanvasToRectangle(cpos);
-            Color c = pieces[i].color;
-            DrawRectangleRec(rec, c);
-          }
-        }
-      }
+    if (!pieces[i].drag.dragging) {
+      DrawPiece(&pieces[i], i);
+    } else {
+      drag_idx = i; // save idx of drag pieces for later drawing
     }
+  }
+  if (drag_idx != -1) {
+    DrawPiece(&pieces[drag_idx], drag_idx);
   }
 }
 
@@ -282,11 +279,11 @@ void OnMouseClick(Pieces pieces) {
   for (int i = 0; i != num_pieces; i++) {
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) &&
         MouseCollisionDetected(
-            mousePos, ResetPiece(i),
-            (Size){piece_length * squareLength, piece_length * squareLength}) &&
-        !pieces[i].drag.dragging) {
+            mousePos, GetPieceHomePos(i),
+            (Size){piece_length * squareLength, piece_length * squareLength})) {
       pieces[i].drag.dragging = true;
-      pieces[i].drag.cpos = SubCanvasPos(mousePos, ResetPiece(i));
+      pieces[i].drag.cpos = SubCanvasPos(mousePos, GetPieceHomePos(i));
+      return;
     }
   }
 }
@@ -295,6 +292,7 @@ void OnMouseRelease(Pieces pieces) {
   for (int i = 0; i != num_pieces; i++) {
     if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON) && pieces[i].drag.dragging) {
       pieces[i].drag.dragging = false;
+      return;
     }
   }
 }
@@ -312,12 +310,6 @@ int main(void) {
   BuildPieces(pieces);
   bool stop = false;
   GridInit(grid);
-  // Drag d = {false, (CanvasPos){50, 50}};
-  // Piece p = {.color = MAGENTA, {{0, 0, 1}, {1, 0, 0}, {0, 0, 1}}, .drag = d};
-  // bool b = DoesShapeFit((GridPos){0, 0}, &p);
-  // if (b) {
-  //   // return 0;
-  // }
   while (!WindowShouldClose() && !stop) {
 
     BeginDrawing();
@@ -326,10 +318,6 @@ int main(void) {
     OnMouseClick(pieces);
     OnMouseRelease(pieces);
     DrawPieces(pieces);
-    // stop = true;
-    // DrawText("Congrats! You created your first window!", 190, 200, 20,
-    //          LIGHTGRAY);
-
     EndDrawing();
   }
   CloseWindow();
