@@ -28,14 +28,6 @@ Color palette[] = {EMPTY,      MAROON,    ORANGE, DARKGREEN, DARKBLUE,
                    BLUE,       VIOLET,    BROWN,  PINK,      YELLOW,
                    GREEN,      SKYBLUE,   PURPLE, BEIGE};
 
-int CalculateSquareSize(void) {
-  const int screenWidth = GetMonitorWidth(GetCurrentMonitor());
-  const int screenHeight = GetMonitorHeight(GetCurrentMonitor());
-  int maxTall = screenHeight / (rows + 1);
-  int maxWide = screenWidth / (cols + num_piece_rows);
-  return (maxTall < maxWide ? maxTall : maxWide) * windowSize;
-}
-
 typedef bool Shape[piece_length][piece_length];
 
 typedef uint8_t Grid[cols][rows];
@@ -79,6 +71,8 @@ Rectangle GridToRectangle(GridPos gp) {
   return CanvasToRectangle(GridToCanvas(gp));
 }
 GridPos CanvasToGrid(CanvasPos cp) {
+  if (cp.x < 0 || cp.y < 0)
+    return (GridPos){-1, -1}; // ensure negatives dont get displayes
   return (GridPos){cp.x / squareLength, cp.y / squareLength};
 }
 
@@ -92,6 +86,14 @@ GridPos AddGridPos(GridPos cp1, GridPos cp2) {
   return (GridPos){cp1.x + cp2.x, cp1.y + cp2.y};
 }
 
+int CalculateSquareSize(void) {
+  const int screenWidth = GetMonitorWidth(GetCurrentMonitor());
+  const int screenHeight = GetMonitorHeight(GetCurrentMonitor());
+  int maxTall = screenHeight / (rows + 1);
+  int maxWide = screenWidth / (cols + num_piece_rows);
+  return (maxTall < maxWide ? maxTall : maxWide) * windowSize;
+}
+
 bool MouseCollisionDetected(CanvasPos mouse, CanvasPos cp, Size size) {
   if (mouse.x > cp.x && mouse.x < cp.x + size.width && mouse.y > cp.y &&
       mouse.y < cp.y + size.height)
@@ -99,8 +101,8 @@ bool MouseCollisionDetected(CanvasPos mouse, CanvasPos cp, Size size) {
   return false;
 }
 
-bool DoesCoodFit(int cood, int bound, int size) {
-  if (cood < 0 || cood > bound - size)
+bool DoesCoordFit(int coord, int bound, int size) {
+  if (coord < 0 || coord > bound - size)
     return false;
   return true;
 }
@@ -124,8 +126,8 @@ Size GetPieceSize(const Piece *piece) {
 
 bool DoesShapeFit(GridPos gpos, const Piece *piece) {
   Size size = GetPieceSize(piece);
-  return DoesCoodFit(gpos.x, cols, size.width) &&
-         DoesCoodFit(gpos.y, rows, size.height);
+  return DoesCoordFit(gpos.x, cols, size.width) &&
+         DoesCoordFit(gpos.y, rows, size.height);
 }
 
 void GridInit(Grid grid) {
@@ -261,18 +263,6 @@ void DrawPieces(Pieces pieces) {
     DrawPiece(&pieces[drag_idx], drag_idx);
   }
 }
-
-// bool DoesShapeFit(const Piece *piece, GridPos gpos, const Grid grid) {
-//   GridPos newgpos =
-//   for (int col = 0; col != piece_length; col++) {
-//     for (int row = 0; row != piece_length; row++) {
-//       if (grid[newgpos.x][newgpos.y].empty) {
-//         return false;
-//       }
-//     }
-//   }
-//   return true;
-// }
 
 void OnMouseClick(Pieces pieces) {
   CanvasPos mousePos = {GetMouseX(), GetMouseY()};
