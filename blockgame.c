@@ -142,13 +142,6 @@ GridPos AddGridPos(GridPos cp1, GridPos cp2) {
   return (GridPos){cp1.x + cp2.x, cp1.y + cp2.y};
 }
 
-Rectangle ScaleRectangle(Rectangle rec, int scale_factor) {
-  return (Rectangle){rec.x + rec.width / 2 * (1 - scale_factor / 100),
-                     rec.y + rec.height / 2 * (1 - scale_factor / 100),
-                     rec.width * scale_factor / 100,
-                     rec.height * scale_factor / 100};
-}
-
 int CalculateSquareSize(void) {
   const int screenWidth = GetMonitorWidth(GetCurrentMonitor());
   const int screenHeight = GetMonitorHeight(GetCurrentMonitor());
@@ -438,9 +431,8 @@ void DrawPiece(const Piece *piece, ScreenPos pos, int a, int scale_factor) {
     for (int row = 0; row != piece_length; row++) {
       if (piece->shape[col][row]) {
         Rectangle rec =
-            ScaleRectangle(SceenToRectangle(AddScreenPos(
-                               pos, GridToScreen((GridPos){col, row}, mc))),
-                           scale_factor);
+            SceenToRectangle(AddScreenPos(
+                               pos, GridToScreen((GridPos){col, row}, mc)));
         Color c = palette[piece->pal_idx];
         c.a = a;
         DrawRectangleRec(rec, c);
