@@ -14,7 +14,7 @@ enum {
   num_pieces = 3,
   pieces_per_grid_length = rows / piece_length,
   num_piece_rows = CEIL_DIV(num_pieces, pieces_per_grid_length),
-  square_probability = 35,
+  square_probability = 75,
   transparency = 127
 };
 
@@ -232,6 +232,48 @@ void RemoveLeftCol(Shape shape) {
   }
 }
 
+void GetFullCols(const Grid *grid, bool full_cols[cols]) {
+  for (int col = 0; col != cols; col++) {
+    int colCount = 0;
+    for (int row = 0; row != rows; row++) {
+      if (grid->arr[col][row]) {
+        colCount++;
+      }
+    }
+    if (colCount == rows) {
+      full_cols[col] = true;
+    }
+  }
+}
+
+void GetFullRows(const Grid *grid, bool full_rows[rows]) {
+  for (int row = 0; row != rows; row++) {
+    int rowCount = 0;
+    for (int col = 0; col != cols; col++) {
+      if (grid->arr[col][row]) {
+        rowCount++;
+      }
+    }
+    if (rowCount == cols) {
+      full_rows[row] = true;
+    }
+  }
+}
+
+void ClearSquares(Grid *grid) {
+  bool full_cols[cols] = {0};
+  GetFullCols(grid, full_cols);
+  bool full_rows[rows] = {0};
+  GetFullRows(grid, full_rows);
+  for (int col = 0; col != cols; col++) {
+    for (int row = 0; row != rows; row++) {
+      if (full_cols[col] || full_rows[row]) {
+        grid->arr[col][row] = false;
+      }
+    }
+  }
+}
+
 void BuildPiece(Piece *piece) {
   for (int col = 0; col < piece_length; col++) {
     for (int row = 0; row < piece_length; row++) {
@@ -256,6 +298,14 @@ CanvasPos GetPieceHomePos(int piece_idx) {
                 (piece_idx % pieces_per_grid_length) * piece_length});
 }
 
+GridPos GetShadowPos(ScreenPos drag_offset, Grid *grid) {
+  ScreenPos effective_mouse_pos = {GetMouseX() +
+                                       squareLength / 2, // draw shadow
+                                   GetMouseY() + squareLength / 2};
+  return CanvasToGrid(ScreenToCanvas(
+      SubScreenPos(effective_mouse_pos, drag_offset), grid->canvas));
+}
+
 void BuildPieces(Pieces *pieces) {
   for (int i = 0; i != num_pieces; i++) {
     BuildPiece(&pieces->arr[i]);
@@ -268,14 +318,6 @@ void RefillPieces(Pieces *pieces) {
       return;
   }
   BuildPieces(pieces);
-}
-
-GridPos GetShadowPos(ScreenPos drag_offset, Grid *grid) {
-  ScreenPos effective_mouse_pos = {GetMouseX() +
-                                       squareLength / 2, // draw shadow
-                                   GetMouseY() + squareLength / 2};
-  return CanvasToGrid(ScreenToCanvas(
-      SubScreenPos(effective_mouse_pos, drag_offset), grid->canvas));
 }
 
 void DropPiece(Piece *piece, Grid *grid) {
@@ -385,6 +427,7 @@ int main(void) {
     ClearBackground((Color){46, 46, 46, 255});
     OnMouseClick(&pieces);
     OnMouseRelease(&pieces, &grid);
+    ClearSquares(&grid);
     RenderGrid(&grid);
     RefillPieces(&pieces);
     DrawPieces(&pieces, &grid);
