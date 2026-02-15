@@ -9,13 +9,14 @@
 #define ARRAY_LENGTH(x) (sizeof(x) / sizeof((x)[0]))
 
 enum {
-  rows = 9,
-  cols = 9,
+  rows = 3,
+  cols = 3,
   piece_length = 3,
   num_pieces = 3,
   pieces_per_grid_length = rows / piece_length,
   num_piece_rows = CEIL_DIV(num_pieces, pieces_per_grid_length),
-  square_probability = 85,
+  square_probability_max = 75,
+  square_probability_min = 20,
   transparency = 127
 };
 
@@ -281,14 +282,14 @@ void RemoveLeftCol(Shape shape) {
   }
 }
 
-void BuildPiece(Piece *piece) {
+void BuildPiece(Piece *piece, int prob) {
   bool is_empty;
   do {
     is_empty = true;
     for (int col = 0; col < piece_length; col++) {
       for (int row = 0; row < piece_length; row++) {
         int rnd = rand() % 100;
-        bool b = rnd < square_probability;
+        bool b = rnd < prob;
         if (b)
           is_empty = false;
         piece->shape[col][row] = b;
@@ -322,10 +323,13 @@ GridPos GetShadowPos(ScreenPos drag_offset, Grid *grid) {
 
 void BuildPieces(Pieces *pieces, Grid *grid) {
   int attempts = 0;
+  int prob = square_probability_max;
   while (true) {
     attempts++;
+    if (attempts % 10 == 0 && prob > square_probability_min)
+      prob--;
     for (int i = 0; i != num_pieces; i++) {
-      BuildPiece(&pieces->arr[i]);
+      BuildPiece(&pieces->arr[i], prob);
     }
     if (DoPiecesFit(*grid, *pieces))
       break;
