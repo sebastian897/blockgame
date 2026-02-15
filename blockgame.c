@@ -176,62 +176,6 @@ bool DoesShapeFit(const Piece *piece, GridPos gpos, Grid *grid) {
          DoesShapeOverlapRectangles(piece, gpos, grid);
 }
 
-void GridInit(Grid *grid) {
-  grid->canvas = (Canvas){{0, 0}};
-  for (int col = 0; col != cols; col++) {
-    for (int row = 0; row != rows; row++) {
-      grid->arr[col][row] = 0; // empty index = 0
-    }
-  }
-}
-
-void RenderGrid(Grid *grid) {
-  for (int col = 0; col != cols; col++) {
-    for (int row = 0; row != rows; row++) {
-      Rectangle rec = SceenToRectangle(
-          CanvasToScreen(GridToCanvas((GridPos){col, row}), grid->canvas));
-      Color c;
-      c = palette[grid->arr[col][row]];
-      DrawRectangleRec(rec, c);
-    }
-  }
-}
-
-bool IsTopRowEmpty(Shape shape) {
-  for (int col = 0; col != piece_length; col++)
-    if (shape[col][0])
-      return false;
-  return true;
-}
-bool IsLeftColEmpty(Shape shape) {
-  for (int row = 0; row != piece_length; row++)
-    if (shape[0][row])
-      return false;
-  return true;
-}
-
-void RemoveTopRow(Shape shape) {
-  for (int row = 0; row != piece_length - 1; row++) {
-    for (int col = 0; col != piece_length; col++) {
-      shape[col][row] = shape[col][row + 1];
-    }
-  }
-  for (int col = 0; col != piece_length; col++) {
-    shape[col][piece_length - 1] = false;
-  }
-}
-
-void RemoveLeftCol(Shape shape) {
-  for (int col = 0; col != piece_length - 1; col++) {
-    for (int row = 0; row != piece_length; row++) {
-      shape[col][row] = shape[col + 1][row];
-    }
-  }
-  for (int row = 0; row != piece_length; row++) {
-    shape[piece_length - 1][row] = false;
-  }
-}
-
 void GetFullCols(const Grid *grid, bool full_cols[cols]) {
   for (int col = 0; col != cols; col++) {
     int colCount = 0;
@@ -274,6 +218,40 @@ void ClearSquares(Grid *grid) {
   }
 }
 
+bool IsTopRowEmpty(Shape shape) {
+  for (int col = 0; col != piece_length; col++)
+    if (shape[col][0])
+      return false;
+  return true;
+}
+bool IsLeftColEmpty(Shape shape) {
+  for (int row = 0; row != piece_length; row++)
+    if (shape[0][row])
+      return false;
+  return true;
+}
+
+void RemoveTopRow(Shape shape) {
+  for (int row = 0; row != piece_length - 1; row++) {
+    for (int col = 0; col != piece_length; col++) {
+      shape[col][row] = shape[col][row + 1];
+    }
+  }
+  for (int col = 0; col != piece_length; col++) {
+    shape[col][piece_length - 1] = false;
+  }
+}
+
+void RemoveLeftCol(Shape shape) {
+  for (int col = 0; col != piece_length - 1; col++) {
+    for (int row = 0; row != piece_length; row++) {
+      shape[col][row] = shape[col + 1][row];
+    }
+  }
+  for (int row = 0; row != piece_length; row++) {
+    shape[piece_length - 1][row] = false;
+  }
+}
 void BuildPiece(Piece *piece) {
   for (int col = 0; col < piece_length; col++) {
     for (int row = 0; row < piece_length; row++) {
@@ -320,6 +298,15 @@ void RefillPieces(Pieces *pieces) {
   BuildPieces(pieces);
 }
 
+void GridInit(Grid *grid) {
+  grid->canvas = (Canvas){{0, 0}};
+  for (int col = 0; col != cols; col++) {
+    for (int row = 0; row != rows; row++) {
+      grid->arr[col][row] = 0; // empty index = 0
+    }
+  }
+}
+
 void DropPiece(Piece *piece, Grid *grid) {
   GridPos gpos = GetShadowPos(piece->drag.offset, grid);
   if (DoesShapeFit(piece, gpos, grid)) {
@@ -334,7 +321,17 @@ void DropPiece(Piece *piece, Grid *grid) {
     piece->pal_idx = 0;
   }
 }
-
+void RenderGrid(Grid *grid) {
+  for (int col = 0; col != cols; col++) {
+    for (int row = 0; row != rows; row++) {
+      Rectangle rec = SceenToRectangle(
+          CanvasToScreen(GridToCanvas((GridPos){col, row}), grid->canvas));
+      Color c;
+      c = palette[grid->arr[col][row]];
+      DrawRectangleRec(rec, c);
+    }
+  }
+}
 void DrawPiece(const Piece *piece, ScreenPos pos, int a) {
   Canvas mc = {(ScreenPos){0, 0}};
   for (int col = 0; col != piece_length; col++) {
