@@ -88,17 +88,37 @@ ScreenPos CanvasToScreen(CanvasPos cpos, Canvas c) {
 CanvasPos ScreenToCanvas(ScreenPos cpos, Canvas c) {
   return (CanvasPos){cpos.x - c.origin.x, cpos.y - c.origin.y};
 }
+
 CanvasPos GridToCanvas(GridPos gp) {
   return (CanvasPos){gp.x * squareLength, gp.y * squareLength};
 }
+
+double sf = 0.8;
+CanvasPos GridToCanvasAtHome(GridPos gp) {
+  double magic = piece_length / 2.0;
+  return (CanvasPos){
+      (gp.x) * squareLength * sf + (1 - sf) * magic * squareLength,
+      (gp.y) * squareLength * sf + (1 - sf) * magic * squareLength};
+}
+
 ScreenPos GridToScreen(GridPos gp, Canvas c) {
   return CanvasToScreen(GridToCanvas(gp), c);
+}
+
+ScreenPos GridToScreenAtHome(GridPos gp, Canvas c) {
+  return CanvasToScreen(GridToCanvasAtHome(gp), c);
 }
 
 Rectangle SceenToRectangle(ScreenPos sp) {
   return (Rectangle){sp.x, sp.y, squareLength * squareAmount,
                      squareLength * squareAmount};
 }
+
+Rectangle SceenToRectangleAtHome(ScreenPos sp) {
+  return (Rectangle){sp.x, sp.y, squareLength * squareAmount * sf,
+                     squareLength * squareAmount * sf};
+}
+
 GridPos CanvasToGrid(CanvasPos cp) {
   if (cp.x < 0 || cp.y < 0)
     return (GridPos){-1, -1}; // ensure negatives dont get displayes
@@ -120,6 +140,13 @@ ScreenPos SubScreenPos(ScreenPos sp1, ScreenPos sp2) {
 }
 GridPos AddGridPos(GridPos cp1, GridPos cp2) {
   return (GridPos){cp1.x + cp2.x, cp1.y + cp2.y};
+}
+
+Rectangle ScaleRectangle(Rectangle rec, int scale_factor) {
+  return (Rectangle){rec.x + rec.width / 2 * (1 - scale_factor / 100),
+                     rec.y + rec.height / 2 * (1 - scale_factor / 100),
+                     rec.width * scale_factor / 100,
+                     rec.height * scale_factor / 100};
 }
 
 int CalculateSquareSize(void) {
@@ -311,7 +338,6 @@ void BuildPiece(Piece *piece, int prob) {
   while (IsLeftColEmpty(piece->shape)) {
     RemoveLeftCol(piece->shape);
   }
-  piece->pal_idx = rand() % (ARRAY_LENGTH(palette) - 1) + 1; // dont chose empty
   piece->drag.dragging = false;
 }
 
@@ -329,6 +355,15 @@ GridPos GetShadowPos(ScreenPos drag_offset, Grid *grid) {
       SubScreenPos(effective_mouse_pos, drag_offset), grid->canvas));
 }
 
+bool HasColorBeenUsed(const Pieces *pieces, int cur_idx, uint8_t col_idx) {
+  for (int j = 0; j != cur_idx; j++) {
+    if (pieces->arr[j].pal_idx == col_idx) {
+      return true;
+    }
+  }
+  return false;
+}
+
 void BuildPieces(Pieces *pieces, Grid *grid) {
   int attempts = 0;
   int prob = square_probability_max;
@@ -338,6 +373,11 @@ void BuildPieces(Pieces *pieces, Grid *grid) {
       prob--;
     for (int i = 0; i != num_pieces; i++) {
       BuildPiece(&pieces->arr[i], prob);
+      uint8_t c;
+      do {
+        c = rand() % (ARRAY_LENGTH(palette) - 1) + 1; // dont chose empty
+      } while (HasColorBeenUsed(pieces, i, c));
+      pieces->arr[i].pal_idx = c;
     }
     if (DoPiecesFit(*grid, *pieces, INT_MAX))
       break;
@@ -392,15 +432,31 @@ void RenderGrid(Grid *grid) {
     }
   }
 }
-void DrawPiece(const Piece *piece, ScreenPos pos, int a) {
+void DrawPiece(const Piece *piece, ScreenPos pos, int a, int scale_factor) {
   Canvas mc = {(ScreenPos){0, 0}};
   for (int col = 0; col != piece_length; col++) {
     for (int row = 0; row != piece_length; row++) {
       if (piece->shape[col][row]) {
-        Rectangle rec = SceenToRectangle(
-            AddScreenPos(pos, GridToScreen((GridPos){col, row}, mc)));
+        Rectangle rec =
+            ScaleRectangle(SceenToRectangle(AddScreenPos(
+                               pos, GridToScreen((GridPos){col, row}, mc))),
+                           scale_factor);
         Color c = palette[piece->pal_idx];
         c.a = a;
+        DrawRectangleRec(rec, c);
+      }
+    }
+  }
+}
+
+void DrawPieceAtHome(const Piece *piece, ScreenPos pos) {
+  Canvas mc = {(ScreenPos){0, 0}};
+  for (int col = 0; col != piece_length; col++) {
+    for (int row = 0; row != piece_length; row++) {
+      if (piece->shape[col][row]) {
+        Rectangle rec = SceenToRectangleAtHome(
+            AddScreenPos(pos, GridToScreenAtHome((GridPos){col, row}, mc)));
+        Color c = palette[piece->pal_idx];
         DrawRectangleRec(rec, c);
       }
     }
@@ -417,19 +473,19 @@ void DrawPieces(Pieces *pieces, Grid *grid) {
       drag_idx = i; // save idx of drag pieces for later drawing
     } else {
       ScreenPos s = CanvasToScreen(GetPieceHomePos(i), pieces->canvas);
-      DrawPiece(&pieces->arr[i], s, MAX_A);
+      DrawPieceAtHome(&pieces->arr[i], s);
     }
   }
   if (drag_idx != -1) {
     GridPos gpos = GetShadowPos(pieces->arr[drag_idx].drag.offset, grid);
     if (DoesPieceFit(&pieces->arr[drag_idx], gpos, grid)) {
       DrawPiece(&pieces->arr[drag_idx], GridToScreen(gpos, grid->canvas),
-                transparency);
+                transparency, 100);
     }
 
     ScreenPos piece_pos = SubScreenPos(
         mousePos, pieces->arr[drag_idx].drag.offset); // draw dragging piece
-    DrawPiece(&pieces->arr[drag_idx], piece_pos, MAX_A);
+    DrawPiece(&pieces->arr[drag_idx], piece_pos, MAX_A, 100);
   }
 }
 
