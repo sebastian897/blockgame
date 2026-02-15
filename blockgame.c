@@ -1,6 +1,7 @@
 #include "raylib.h"
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
 
@@ -212,14 +213,16 @@ void ClearSquares(Grid *grid) {
   for (int col = 0; col != cols; col++) {
     for (int row = 0; row != rows; row++) {
       if (full_cols[col] || full_rows[row]) {
-        grid->arr[col][row] = false;
+        grid->arr[col][row] = 0;
       }
     }
   }
 }
 
-void DropPiece(Piece *piece, Grid *grid);
+bool DropPiece(Piece *piece, GridPos gpos, Grid *grid);
+
 bool IsPiecesEmpty(const Pieces *pieces);
+
 bool DoPiecesFit(Grid grid, Pieces pieces) {
   if (IsPiecesEmpty(&pieces)) {
     return true;
@@ -229,10 +232,11 @@ bool DoPiecesFit(Grid grid, Pieces pieces) {
       continue;
     for (int col = 0; col != cols; col++) {
       for (int row = 0; row != rows; row++) {
-        if (!DoesPieceFit(&pieces.arr[p_idx], (GridPos){col, row}, &grid))
+        GridPos gpos = {col, row};
+        if (!DropPiece(&pieces.arr[p_idx], gpos, &grid))
           continue;
-        DropPiece(&pieces.arr[p_idx], &grid);
         pieces.arr[p_idx].pal_idx = 0;
+        ClearSquares(&grid);
         if (DoPiecesFit(grid, pieces)) {
           return true;
         }
@@ -317,13 +321,16 @@ GridPos GetShadowPos(ScreenPos drag_offset, Grid *grid) {
 }
 
 void BuildPieces(Pieces *pieces, Grid *grid) {
+  int attempts = 0;
   while (true) {
+    attempts++;
     for (int i = 0; i != num_pieces; i++) {
       BuildPiece(&pieces->arr[i]);
     }
     if (DoPiecesFit(*grid, *pieces))
       break;
   }
+  printf("attempts = %d\n", attempts);
 }
 
 bool IsPiecesEmpty(const Pieces *pieces) {
@@ -348,19 +355,19 @@ void GridInit(Grid *grid) {
   }
 }
 
-void DropPiece(Piece *piece, Grid *grid) {
-  GridPos gpos = GetShadowPos(piece->drag.offset, grid);
-  if (DoesPieceFit(piece, gpos, grid)) {
-    for (int col = 0; col != piece_length; col++) {
-      for (int row = 0; row != piece_length; row++) {
-        if (!piece->shape[col][row])
-          continue;
-        GridPos rec_pos = AddGridPos(gpos, (GridPos){col, row});
-        grid->arr[rec_pos.x][rec_pos.y] = piece->pal_idx;
-      }
+bool DropPiece(Piece *piece, GridPos gpos, Grid *grid) {
+  if (!DoesPieceFit(piece, gpos, grid))
+    return false;
+  for (int col = 0; col != piece_length; col++) {
+    for (int row = 0; row != piece_length; row++) {
+      if (!piece->shape[col][row])
+        continue;
+      GridPos rec_pos = AddGridPos(gpos, (GridPos){col, row});
+      grid->arr[rec_pos.x][rec_pos.y] = piece->pal_idx;
     }
-    piece->pal_idx = 0;
   }
+  piece->pal_idx = 0;
+  return true;
 }
 void RenderGrid(Grid *grid) {
   for (int col = 0; col != cols; col++) {
@@ -437,7 +444,8 @@ void OnMouseRelease(Pieces *pieces, Grid *grid) {
     if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON) &&
         pieces->arr[i].drag.dragging) {
       if (pieces->arr[i].drag.dragging) {
-        DropPiece(&pieces->arr[i], grid);
+        GridPos gpos = GetShadowPos(pieces->arr[i].drag.offset, grid);
+        DropPiece(&pieces->arr[i], gpos, grid);
         pieces->arr[i].drag.dragging = false;
         return;
       }
@@ -446,7 +454,7 @@ void OnMouseRelease(Pieces *pieces, Grid *grid) {
 }
 
 int main(void) {
-  srand(time(NULL));
+  srand(1);
   InitWindow(800, 600, "BlockGame");
   // ToggleFullscreen();
   squareLength = CalculateSquareSize();
@@ -456,10 +464,10 @@ int main(void) {
 
   Grid grid;
   Pieces pieces;
-  BuildPieces(&pieces, &grid);
   pieces.canvas = (Canvas){{GridToCanvas((GridPos){cols, 0}).x, 0}};
   bool stop = false;
   GridInit(&grid);
+  BuildPieces(&pieces, &grid);
   while (!WindowShouldClose() && !stop) {
     BeginDrawing();
     ClearBackground((Color){46, 46, 46, 255});
