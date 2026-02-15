@@ -1,4 +1,5 @@
 #include "raylib.h"
+#include <limits.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -9,8 +10,8 @@
 #define ARRAY_LENGTH(x) (sizeof(x) / sizeof((x)[0]))
 
 enum {
-  rows = 3,
-  cols = 3,
+  rows = 9,
+  cols = 9,
   piece_length = 3,
   num_pieces = 3,
   pieces_per_grid_length = rows / piece_length,
@@ -19,6 +20,8 @@ enum {
   square_probability_min = 20,
   transparency = 127
 };
+
+typedef enum gamestate { menu, playing, game_over } gamestate;
 
 const double windowSize = 0.8;
 const double squareAmount = 0.95;
@@ -224,8 +227,8 @@ bool DropPiece(Piece *piece, GridPos gpos, Grid *grid);
 
 bool IsPiecesEmpty(const Pieces *pieces);
 
-bool DoPiecesFit(Grid grid, Pieces pieces) {
-  if (IsPiecesEmpty(&pieces)) {
+bool DoPiecesFit(Grid grid, Pieces pieces, int rem_levels) {
+  if (IsPiecesEmpty(&pieces) || rem_levels == 0) {
     return true;
   }
   for (int p_idx = 0; p_idx != num_pieces; p_idx++) {
@@ -238,13 +241,18 @@ bool DoPiecesFit(Grid grid, Pieces pieces) {
           continue;
         pieces.arr[p_idx].pal_idx = 0;
         ClearSquares(&grid);
-        if (DoPiecesFit(grid, pieces)) {
+        if (DoPiecesFit(grid, pieces, rem_levels - 1)) {
           return true;
         }
       }
     }
   }
   return false;
+}
+
+void CanPlacePiece(Pieces *pieces, Grid *grid, gamestate *gstate) {
+  if (!DoPiecesFit(*grid, *pieces, 1))
+    *gstate = game_over; // only 1 level of look ahead
 }
 
 bool IsTopRowEmpty(Shape shape) {
@@ -331,7 +339,7 @@ void BuildPieces(Pieces *pieces, Grid *grid) {
     for (int i = 0; i != num_pieces; i++) {
       BuildPiece(&pieces->arr[i], prob);
     }
-    if (DoPiecesFit(*grid, *pieces))
+    if (DoPiecesFit(*grid, *pieces, INT_MAX))
       break;
   }
   printf("attempts = %d\n", attempts);
@@ -462,8 +470,9 @@ int main(void) {
   InitWindow(800, 600, "BlockGame");
   // ToggleFullscreen();
   squareLength = CalculateSquareSize();
-  SetWindowSize(squareLength * (cols + num_piece_rows * piece_length),
-                squareLength * rows);
+  int screen_width = squareLength * (cols + num_piece_rows * piece_length);
+  int screen_height = squareLength * rows;
+  SetWindowSize(screen_width, screen_height);
   SetTargetFPS(60);
 
   Grid grid;
@@ -472,16 +481,37 @@ int main(void) {
   bool stop = false;
   GridInit(&grid);
   BuildPieces(&pieces, &grid);
+  gamestate gstate = playing;
+  int fade = 0;
   while (!WindowShouldClose() && !stop) {
-    BeginDrawing();
-    ClearBackground((Color){46, 46, 46, 255});
-    OnMouseClick(&pieces);
-    OnMouseRelease(&pieces, &grid);
-    ClearSquares(&grid);
-    RenderGrid(&grid);
-    RefillPieces(&pieces, &grid);
-    DrawPieces(&pieces, &grid);
-    EndDrawing();
+    switch (gstate) {
+    case playing:
+      OnMouseClick(&pieces);
+      OnMouseRelease(&pieces, &grid);
+      ClearSquares(&grid);
+      RefillPieces(&pieces, &grid);
+      CanPlacePiece(&pieces, &grid, &gstate);
+
+      BeginDrawing();
+      ClearBackground((Color){46, 46, 46, 255});
+      RenderGrid(&grid);
+      DrawPieces(&pieces, &grid);
+      EndDrawing();
+      break;
+    case game_over:
+      BeginDrawing();
+      ClearBackground((Color){46, 46, 46, 255});
+      RenderGrid(&grid);
+      DrawPieces(&pieces, &grid);
+      DrawRectangleRec((Rectangle){0, 0, screen_width, screen_height},
+                       (Color){0, 0, 0, fade});
+      EndDrawing();
+      if (fade < MAX_A - 1)
+        fade += 2;
+      break;
+    default:
+      exit(1);
+    }
   }
   CloseWindow();
   return 0;
