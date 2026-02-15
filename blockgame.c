@@ -14,7 +14,7 @@ enum {
   num_pieces = 3,
   pieces_per_grid_length = rows / piece_length,
   num_piece_rows = CEIL_DIV(num_pieces, pieces_per_grid_length),
-  square_probability = 75,
+  square_probability = 85,
   transparency = 127
 };
 
@@ -155,7 +155,7 @@ Size GetPieceSize(const Piece *piece) {
   return size;
 }
 
-bool DoesShapeOverlapRectangles(const Piece *piece, GridPos gpos, Grid *grid) {
+bool IsSpaceOccupied(const Piece *piece, GridPos gpos, Grid *grid) {
   for (int col = 0; col != piece_length; col++) {
     for (int row = 0; row != piece_length; row++) {
       if (!piece->shape[col][row])
@@ -169,11 +169,11 @@ bool DoesShapeOverlapRectangles(const Piece *piece, GridPos gpos, Grid *grid) {
   return true;
 }
 
-bool DoesShapeFit(const Piece *piece, GridPos gpos, Grid *grid) {
+bool DoesPieceFit(const Piece *piece, GridPos gpos, Grid *grid) {
   Size size = GetPieceSize(piece);
   return DoesCoordFit(gpos.x, cols, size.width) &&
          DoesCoordFit(gpos.y, rows, size.height) &&
-         DoesShapeOverlapRectangles(piece, gpos, grid);
+         IsSpaceOccupied(piece, gpos, grid);
 }
 
 void GetFullCols(const Grid *grid, bool full_cols[cols]) {
@@ -218,6 +218,30 @@ void ClearSquares(Grid *grid) {
   }
 }
 
+void DropPiece(Piece *piece, Grid *grid);
+bool IsPiecesEmpty(const Pieces *pieces);
+bool DoPiecesFit(Grid grid, Pieces pieces) {
+  if (IsPiecesEmpty(&pieces)) {
+    return true;
+  }
+  for (int p_idx = 0; p_idx != num_pieces; p_idx++) {
+    if (pieces.arr[p_idx].pal_idx == 0)
+      continue;
+    for (int col = 0; col != cols; col++) {
+      for (int row = 0; row != rows; row++) {
+        if (!DoesPieceFit(&pieces.arr[p_idx], (GridPos){col, row}, &grid))
+          continue;
+        DropPiece(&pieces.arr[p_idx], &grid);
+        pieces.arr[p_idx].pal_idx = 0;
+        if (DoPiecesFit(grid, pieces)) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
 bool IsTopRowEmpty(Shape shape) {
   for (int col = 0; col != piece_length; col++)
     if (shape[col][0])
@@ -252,14 +276,22 @@ void RemoveLeftCol(Shape shape) {
     shape[piece_length - 1][row] = false;
   }
 }
+
 void BuildPiece(Piece *piece) {
-  for (int col = 0; col < piece_length; col++) {
-    for (int row = 0; row < piece_length; row++) {
-      int rnd = rand() % 100;
-      bool b = rnd < square_probability;
-      piece->shape[col][row] = b;
+  bool is_empty;
+  do {
+    is_empty = true;
+    for (int col = 0; col < piece_length; col++) {
+      for (int row = 0; row < piece_length; row++) {
+        int rnd = rand() % 100;
+        bool b = rnd < square_probability;
+        if (b)
+          is_empty = false;
+        piece->shape[col][row] = b;
+      }
     }
-  }
+  } while (is_empty);
+
   while (IsTopRowEmpty(piece->shape)) {
     RemoveTopRow(piece->shape);
   }
@@ -284,18 +316,27 @@ GridPos GetShadowPos(ScreenPos drag_offset, Grid *grid) {
       SubScreenPos(effective_mouse_pos, drag_offset), grid->canvas));
 }
 
-void BuildPieces(Pieces *pieces) {
-  for (int i = 0; i != num_pieces; i++) {
-    BuildPiece(&pieces->arr[i]);
+void BuildPieces(Pieces *pieces, Grid *grid) {
+  while (true) {
+    for (int i = 0; i != num_pieces; i++) {
+      BuildPiece(&pieces->arr[i]);
+    }
+    if (DoPiecesFit(*grid, *pieces))
+      break;
   }
 }
 
-void RefillPieces(Pieces *pieces) {
+bool IsPiecesEmpty(const Pieces *pieces) {
   for (int i = 0; i != num_pieces; i++) {
     if (pieces->arr[i].pal_idx != 0)
-      return;
+      return false;
   }
-  BuildPieces(pieces);
+  return true;
+}
+
+void RefillPieces(Pieces *pieces, Grid *grid) {
+  if (IsPiecesEmpty(pieces))
+    BuildPieces(pieces, grid);
 }
 
 void GridInit(Grid *grid) {
@@ -309,7 +350,7 @@ void GridInit(Grid *grid) {
 
 void DropPiece(Piece *piece, Grid *grid) {
   GridPos gpos = GetShadowPos(piece->drag.offset, grid);
-  if (DoesShapeFit(piece, gpos, grid)) {
+  if (DoesPieceFit(piece, gpos, grid)) {
     for (int col = 0; col != piece_length; col++) {
       for (int row = 0; row != piece_length; row++) {
         if (!piece->shape[col][row])
@@ -362,7 +403,7 @@ void DrawPieces(Pieces *pieces, Grid *grid) {
   }
   if (drag_idx != -1) {
     GridPos gpos = GetShadowPos(pieces->arr[drag_idx].drag.offset, grid);
-    if (DoesShapeFit(&pieces->arr[drag_idx], gpos, grid)) {
+    if (DoesPieceFit(&pieces->arr[drag_idx], gpos, grid)) {
       DrawPiece(&pieces->arr[drag_idx], GridToScreen(gpos, grid->canvas),
                 transparency);
     }
@@ -415,7 +456,7 @@ int main(void) {
 
   Grid grid;
   Pieces pieces;
-  BuildPieces(&pieces);
+  BuildPieces(&pieces, &grid);
   pieces.canvas = (Canvas){{GridToCanvas((GridPos){cols, 0}).x, 0}};
   bool stop = false;
   GridInit(&grid);
@@ -426,7 +467,7 @@ int main(void) {
     OnMouseRelease(&pieces, &grid);
     ClearSquares(&grid);
     RenderGrid(&grid);
-    RefillPieces(&pieces);
+    RefillPieces(&pieces, &grid);
     DrawPieces(&pieces, &grid);
     EndDrawing();
   }
