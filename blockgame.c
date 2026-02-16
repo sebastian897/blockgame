@@ -94,30 +94,13 @@ CanvasPos GridToCanvas(GridPos gp) {
   return (CanvasPos){gp.x * squareLength, gp.y * squareLength};
 }
 
-float sf = 0.8;
-CanvasPos GridToCanvasAtHome(GridPos gp) {
-  float magic = piece_length / 2.0;
-  return (CanvasPos){
-      (gp.x) * squareLength * sf + (1 - sf) * magic * squareLength,
-      (gp.y) * squareLength * sf + (1 - sf) * magic * squareLength};
-}
-
 ScreenPos GridToScreen(GridPos gp, Canvas c) {
   return CanvasToScreen(GridToCanvas(gp), c);
-}
-
-ScreenPos GridToScreenAtHome(GridPos gp, Canvas c) {
-  return CanvasToScreen(GridToCanvasAtHome(gp), c);
 }
 
 Rectangle ScreenToRectangle(ScreenPos sp) {
   return (Rectangle){sp.x, sp.y, squareLength * squareAmount,
                      squareLength * squareAmount};
-}
-
-Rectangle ScreenToRectangleAtHome(ScreenPos sp) {
-  return (Rectangle){sp.x, sp.y, squareLength * squareAmount * sf,
-                     squareLength * squareAmount * sf};
 }
 
 GridPos CanvasToGrid(CanvasPos cp) {
@@ -426,22 +409,8 @@ void RenderGrid(Grid *grid) {
     }
   }
 }
-void DrawPieceOld(const Piece *piece, ScreenPos pos, int a, int scale_factor) {
-  Canvas mc = {(ScreenPos){0, 0}};
-  for (int col = 0; col != piece_length; col++) {
-    for (int row = 0; row != piece_length; row++) {
-      if (piece->shape[col][row]) {
-        Rectangle rec = ScreenToRectangle(
-            AddScreenPos(pos, GridToScreen((GridPos){col, row}, mc)));
-        Color c = palette[piece->pal_idx];
-        c.a = a;
-        DrawRectangleRec(rec, c);
-      }
-    }
-  }
-}
 
-Rectangle ScaleIt(Rectangle rect, ScreenPos centre, float scale_factor) {
+Rectangle ScaleRectangle(Rectangle rect, ScreenPos centre, float scale_factor) {
   return (Rectangle){centre.x - scale_factor * (centre.x - rect.x),
                      centre.y - scale_factor * (centre.y - rect.y),
                      rect.width * scale_factor, rect.height * scale_factor};
@@ -462,7 +431,7 @@ void DrawPiece(const Piece *piece, ScreenPos piece_pos, int a, float scale_facto
             AddScreenPos(piece_pos, GridToScreen((GridPos){col, row}, mc));
         Rectangle unscaled_rect = ScreenToRectangle(rec_pos);
         ScreenPos centrepos = GetPieceCentre(piece_pos);
-        Rectangle rec = ScaleIt(unscaled_rect, centrepos, scale_factor);
+        Rectangle rec = ScaleRectangle(unscaled_rect, centrepos, scale_factor);
         Color c = palette[piece->pal_idx];
         c.a = a;
         DrawRectangleRec(rec, c);
