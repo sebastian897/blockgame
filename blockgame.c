@@ -310,17 +310,18 @@ bool DropPiece(Piece *piece, GridPos gpos, Grid *grid);
 bool IsPiecesEmpty(const Pieces *pieces);
 
 bool DoPiecesFitRecurse(Grid *grid_ptr, Pieces *pieces_ptr, int rem_levels) {
-  if (IsPiecesEmpty(pieces_ptr) || rem_levels == 0) {
+  if (IsPiecesEmpty(pieces_ptr) || rem_levels == 0)
     return true;
-  }
   for (int p_idx = 0; p_idx != num_pieces; p_idx++) {
     if (pieces_ptr->arr[p_idx].pal_idx == 0)
       continue;
     for (int col = 0; col != cols; col++) {
       for (int row = 0; row != rows; row++) {
+        GridPos gpos = {col, row};
+        if (!DoesPieceFit(&pieces_ptr->arr[p_idx], gpos, grid_ptr))
+          continue;
         Grid grid = GridCopy(*grid_ptr);
         Pieces pieces = PiecesCopy(*pieces_ptr);
-        GridPos gpos = {col, row};
         if (!DropPiece(&pieces.arr[p_idx], gpos, &grid)) {
           PiecesDestroy(&pieces);
           GridDestroy(&grid);
@@ -470,8 +471,6 @@ void GridInit(Grid *grid) {
 }
 
 bool DropPiece(Piece *piece, GridPos gpos, Grid *grid) {
-  if (!DoesPieceFit(piece, gpos, grid))
-    return false;
   for (int col = 0; col != piece_length; col++) {
     for (int row = 0; row != piece_length; row++) {
       if (!piece->shape[PIECE_IDX(col, row)])
@@ -571,13 +570,14 @@ void OnMouseClick(Pieces *pieces) {
 }
 
 void OnMouseRelease(Pieces *pieces, Grid *grid) {
-  for (int i = 0; i != num_pieces; i++) {
+  for (int p_idx = 0; p_idx != num_pieces; p_idx++) {
     if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON) &&
-        pieces->arr[i].drag.dragging) {
-      if (pieces->arr[i].drag.dragging) {
-        GridPos gpos = GetShadowPos(pieces->arr[i].drag.offset, grid);
-        DropPiece(&pieces->arr[i], gpos, grid);
-        pieces->arr[i].drag.dragging = false;
+        pieces->arr[p_idx].drag.dragging) {
+      if (pieces->arr[p_idx].drag.dragging) {
+        GridPos gpos = GetShadowPos(pieces->arr[p_idx].drag.offset, grid);
+        if (DoesPieceFit(&pieces->arr[p_idx], gpos, grid))
+          DropPiece(&pieces->arr[p_idx], gpos, grid);
+        pieces->arr[p_idx].drag.dragging = false;
         return;
       }
     }
