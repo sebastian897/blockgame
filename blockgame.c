@@ -9,13 +9,22 @@
 #define CEIL_DIV(x, y) (((x) + (y) - 1) / (y))
 #define ARRAY_LENGTH(x) (sizeof(x) / sizeof((x)[0]))
 
+int rows = 9;
+int cols = 9;
+int piece_length = 3;
+int num_pieces = 3;
+int pieces_per_grid_length;
+int num_piece_rows;
+
+#define GRID_IDX(col, row) ((col) * rows + (row))
+#define PIECE_IDX(col, row) ((col) * piece_length + (row))
+
+void Recalc() {
+  pieces_per_grid_length = rows / piece_length;
+  num_piece_rows = CEIL_DIV(num_pieces, pieces_per_grid_length);
+}
+
 enum {
-  rows = 9,
-  cols = 9,
-  piece_length = 3,
-  num_pieces = 3,
-  pieces_per_grid_length = rows / piece_length,
-  num_piece_rows = CEIL_DIV(num_pieces, pieces_per_grid_length),
   square_probability_max = 75,
   square_probability_min = 20,
   transparency = 127
@@ -36,9 +45,10 @@ Color palette[] = {EMPTY,      MAROON,    ORANGE, DARKGREEN, DARKBLUE,
                    BLUE,       VIOLET,    BROWN,  PINK,      YELLOW,
                    GREEN,      SKYBLUE,   PURPLE, BEIGE};
 
-void random_pal_idx(uint8_t pal_idxs[ARRAY_LENGTH(palette)-1], int n) {
-  int total = ARRAY_LENGTH(palette)-1;
-  for (int i = 0; i != total; i++) pal_idxs[i] = i+1;
+void random_pal_idx(uint8_t pal_idxs[ARRAY_LENGTH(palette) - 1], int n) {
+  int total = ARRAY_LENGTH(palette) - 1;
+  for (int i = 0; i != total; i++)
+    pal_idxs[i] = i + 1;
   for (int i = 0; i != n; i++) {
     int j = i + rand() % (total - i);
 
@@ -49,7 +59,8 @@ void random_pal_idx(uint8_t pal_idxs[ARRAY_LENGTH(palette)-1], int n) {
   }
 }
 
-typedef bool Shape[piece_length][piece_length];
+typedef bool *Shape;
+// typedef bool Shape[piece_length][piece_length];
 
 typedef struct ScreenPos {
   int x;
@@ -61,7 +72,8 @@ typedef struct Canvas {
 } Canvas;
 
 typedef struct Grid {
-  uint8_t arr[cols][rows];
+  // uint8_t arr[cols][rows];
+  uint8_t *arr;
   Canvas canvas;
 } Grid;
 
@@ -87,7 +99,8 @@ typedef struct Piece {
 } Piece;
 
 typedef struct Pieces {
-  Piece arr[num_pieces];
+  // Piece arr[num_pieces];
+  Piece *arr;
   Canvas canvas;
 } Pieces;
 
@@ -164,7 +177,7 @@ Size GetPieceSize(const Piece *piece) {
   Size size = {0, 0};
   for (int col = 0; col != piece_length; col++) {
     for (int row = 0; row != piece_length; row++) {
-      if (piece->shape[col][row]) {
+      if (piece->shape[PIECE_IDX(col, row)]) {
         if (col > size.width - 1) {
           size.width = col + 1;
         }
@@ -180,10 +193,10 @@ Size GetPieceSize(const Piece *piece) {
 bool IsSpaceOccupied(const Piece *piece, GridPos gpos, Grid *grid) {
   for (int col = 0; col != piece_length; col++) {
     for (int row = 0; row != piece_length; row++) {
-      if (!piece->shape[col][row])
+      if (!piece->shape[PIECE_IDX(col, row)])
         continue;
       GridPos rec_pos = AddGridPos(gpos, (GridPos){col, row});
-      if (grid->arr[rec_pos.x][rec_pos.y]) {
+      if (grid->arr[GRID_IDX(rec_pos.x, rec_pos.y)]) {
         return false;
       }
     }
@@ -198,11 +211,11 @@ bool DoesPieceFit(const Piece *piece, GridPos gpos, Grid *grid) {
          IsSpaceOccupied(piece, gpos, grid);
 }
 
-void GetFullCols(const Grid *grid, bool full_cols[cols]) {
+void GetFullCols(const Grid *grid, bool *full_cols) {
   for (int col = 0; col != cols; col++) {
     int colCount = 0;
     for (int row = 0; row != rows; row++) {
-      if (grid->arr[col][row]) {
+      if (grid->arr[GRID_IDX(col, row)]) {
         colCount++;
       }
     }
@@ -212,11 +225,11 @@ void GetFullCols(const Grid *grid, bool full_cols[cols]) {
   }
 }
 
-void GetFullRows(const Grid *grid, bool full_rows[rows]) {
+void GetFullRows(const Grid *grid, bool* full_rows) {
   for (int row = 0; row != rows; row++) {
     int rowCount = 0;
     for (int col = 0; col != cols; col++) {
-      if (grid->arr[col][row]) {
+      if (grid->arr[GRID_IDX(col, row)]) {
         rowCount++;
       }
     }
@@ -227,14 +240,16 @@ void GetFullRows(const Grid *grid, bool full_rows[rows]) {
 }
 
 void ClearSquares(Grid *grid) {
-  bool full_cols[cols] = {0};
+  // bool full_cols[cols] = {0};
+  bool *full_cols = calloc(cols, sizeof(*full_cols));
   GetFullCols(grid, full_cols);
-  bool full_rows[rows] = {0};
+  // bool full_rows[rows] = {0};
+  bool *full_rows = calloc(rows, sizeof(*full_rows));
   GetFullRows(grid, full_rows);
   for (int col = 0; col != cols; col++) {
     for (int row = 0; row != rows; row++) {
       if (full_cols[col] || full_rows[row]) {
-        grid->arr[col][row] = 0;
+        grid->arr[GRID_IDX(col, row)] = 0;
       }
     }
   }
@@ -274,13 +289,13 @@ void CanPlacePiece(Pieces *pieces, Grid *grid, gamestate *gstate) {
 
 bool IsTopRowEmpty(Shape shape) {
   for (int col = 0; col != piece_length; col++)
-    if (shape[col][0])
+    if (shape[PIECE_IDX(col,0)])
       return false;
   return true;
 }
 bool IsLeftColEmpty(Shape shape) {
   for (int row = 0; row != piece_length; row++)
-    if (shape[0][row])
+    if (shape[PIECE_IDX(0, row)])
       return false;
   return true;
 }
@@ -288,22 +303,22 @@ bool IsLeftColEmpty(Shape shape) {
 void RemoveTopRow(Shape shape) {
   for (int row = 0; row != piece_length - 1; row++) {
     for (int col = 0; col != piece_length; col++) {
-      shape[col][row] = shape[col][row + 1];
+      shape[PIECE_IDX(col, row)] = shape[PIECE_IDX(col, row+ 1)];
     }
   }
   for (int col = 0; col != piece_length; col++) {
-    shape[col][piece_length - 1] = false;
+    shape[PIECE_IDX(col, piece_length - 1)] = false;
   }
 }
 
 void RemoveLeftCol(Shape shape) {
   for (int col = 0; col != piece_length - 1; col++) {
     for (int row = 0; row != piece_length; row++) {
-      shape[col][row] = shape[col + 1][row];
+      shape[PIECE_IDX(col, row)] = shape[PIECE_IDX(col+1, row)];
     }
   }
   for (int row = 0; row != piece_length; row++) {
-    shape[piece_length - 1][row] = false;
+    shape[PIECE_IDX(piece_length - 1, row)] = false;
   }
 }
 
@@ -317,7 +332,7 @@ void BuildPiece(Piece *piece, int prob) {
         bool b = rnd < prob;
         if (b)
           is_empty = false;
-        piece->shape[col][row] = b;
+        piece->shape[PIECE_IDX(col, row)] = b;
       }
     }
   } while (is_empty);
@@ -348,7 +363,7 @@ GridPos GetShadowPos(ScreenPos drag_offset, Grid *grid) {
 void BuildPieces(Pieces *pieces, Grid *grid) {
   int attempts = 0;
   int prob = square_probability_max;
-  uint8_t pal_idxs[ARRAY_LENGTH(palette)-1];
+  uint8_t pal_idxs[ARRAY_LENGTH(palette) - 1];
   random_pal_idx(pal_idxs, num_pieces);
   while (true) {
     attempts++;
@@ -381,7 +396,7 @@ void GridInit(Grid *grid) {
   grid->canvas = (Canvas){{0, 0}};
   for (int col = 0; col != cols; col++) {
     for (int row = 0; row != rows; row++) {
-      grid->arr[col][row] = 0; // empty index = 0
+      grid->arr[GRID_IDX(col, row)] = 0; // empty index = 0
     }
   }
 }
@@ -391,10 +406,10 @@ bool DropPiece(Piece *piece, GridPos gpos, Grid *grid) {
     return false;
   for (int col = 0; col != piece_length; col++) {
     for (int row = 0; row != piece_length; row++) {
-      if (!piece->shape[col][row])
+      if (!piece->shape[PIECE_IDX(col, row)])
         continue;
       GridPos rec_pos = AddGridPos(gpos, (GridPos){col, row});
-      grid->arr[rec_pos.x][rec_pos.y] = piece->pal_idx;
+      grid->arr[GRID_IDX(rec_pos.x,rec_pos.y)] = piece->pal_idx;
     }
   }
   piece->pal_idx = 0;
@@ -406,7 +421,7 @@ void RenderGrid(Grid *grid) {
       Rectangle rec = ScreenToRectangle(
           CanvasToScreen(GridToCanvas((GridPos){col, row}), grid->canvas));
       Color c;
-      c = palette[grid->arr[col][row]];
+      c = palette[grid->arr[GRID_IDX(col, row)]];
       DrawRectangleRec(rec, c);
     }
   }
@@ -429,7 +444,7 @@ void DrawPiece(const Piece *piece, ScreenPos piece_pos, int a,
   Canvas mc = {(ScreenPos){0, 0}};
   for (int col = 0; col != piece_length; col++) {
     for (int row = 0; row != piece_length; row++) {
-      if (piece->shape[col][row]) {
+      if (piece->shape[PIECE_IDX(col, row)]) {
         ScreenPos rec_pos =
             AddScreenPos(piece_pos, GridToScreen((GridPos){col, row}, mc));
         Rectangle unscaled_rect = ScreenToRectangle(rec_pos);
@@ -504,6 +519,7 @@ void OnMouseRelease(Pieces *pieces, Grid *grid) {
 int main(void) {
   srand(1);
   InitWindow(800, 600, "BlockGame");
+  Recalc();
   // ToggleFullscreen();
   squareLength = CalculateSquareSize();
   int screen_width = squareLength * (cols + num_piece_rows * piece_length);
@@ -512,7 +528,13 @@ int main(void) {
   SetTargetFPS(60);
 
   Grid grid;
+  grid.arr = malloc(cols * rows * sizeof(*grid.arr));
   Pieces pieces;
+  pieces.arr = malloc(num_pieces * sizeof(*pieces.arr));
+  for (int p_idx = 0; p_idx != num_pieces; p_idx++) {
+    pieces.arr[p_idx].shape =
+        malloc(piece_length * piece_length * sizeof(*pieces.arr[p_idx].shape));
+  }
   pieces.canvas = (Canvas){{GridToCanvas((GridPos){cols, 0}).x, 0}};
   bool stop = false;
   GridInit(&grid);
@@ -550,5 +572,7 @@ int main(void) {
     }
   }
   CloseWindow();
+  free(grid.arr);
+  free(pieces.arr);
   return 0;
 }
