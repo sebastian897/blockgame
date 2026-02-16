@@ -165,7 +165,7 @@ void ReCalc(void) {
   const int screenWidth = GetScreenWidth();
   const int screenHeight = GetScreenHeight();
 #else
-  const int screenWidth = GetMonitorWidth(GetCurrentMonitor()) * windowSize / 2;
+  const int screenWidth = GetMonitorWidth(GetCurrentMonitor()) * windowSize ;
   const int screenHeight = GetMonitorHeight(GetCurrentMonitor()) * windowSize;
 #endif
   SwapGrid(screenWidth, screenHeight);
@@ -658,15 +658,7 @@ int main(void) {
                                                rows}))
                      .y};
 #else
-    printf("GetScreenHeight = %d\n", GetScreenHeight());
-    pieces.canvas = (Canvas){
-        0, (SubCanvasPos(
-                (CanvasPos){0, GetScreenHeight()},
-                GridToCanvas((GridPos){0, pieces_per_grid_length / num_pieces *
-                                                  piece_length +
-                                              phone_bottom_offset})))
-               .y};
-    // pieces.canvas = (Canvas){0, GridToCanvas((GridPos){0, rows}).y};
+    pieces.canvas = (Canvas){0, GridToCanvas((GridPos){0, rows}).y};
 #endif
   } else
     pieces.canvas = (Canvas){{GridToCanvas((GridPos){cols, 0}).x, 0}};
