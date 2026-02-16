@@ -254,6 +254,8 @@ void ClearSquares(Grid *grid) {
       }
     }
   }
+  free(full_rows);
+  free(full_cols);
 }
 
 Grid GridCopy(Grid grid) {
@@ -276,6 +278,18 @@ Pieces PiecesCopy(Pieces pieces) {
   return pieces;
 }
 
+void AllocGrid(Grid* grid) {
+  grid->arr = malloc(cols * rows * sizeof(*grid->arr));
+}
+
+void AllocPieces(Pieces* pieces) {
+  pieces->arr = malloc(num_pieces * sizeof(*pieces->arr));
+  for (int p_idx = 0; p_idx != num_pieces; p_idx++) {
+    pieces->arr[p_idx].shape =
+        malloc(piece_length * piece_length * sizeof(*pieces->arr[p_idx].shape));
+  }
+}
+
 void GridDestroy(Grid *grid) {
   if (grid->arr != NULL) {
     free(grid->arr);
@@ -285,7 +299,7 @@ void GridDestroy(Grid *grid) {
 void PiecesDestroy(Pieces *pieces) {
   if (pieces->arr) {
     for (int p_idx = 0; p_idx != num_pieces; p_idx++) {
-      free(pieces->arr->shape);
+      free(pieces->arr[p_idx].shape);
     }
     free(pieces->arr);
   }
@@ -309,8 +323,11 @@ bool DoPiecesFit(Grid *grid_ptr, Pieces *pieces_ptr, int rem_levels) {
         Grid grid = GridCopy(*grid_ptr);
         Pieces pieces = PiecesCopy(*pieces_ptr);
         GridPos gpos = {col, row};
-        if (!DropPiece(&pieces.arr[p_idx], gpos, &grid))
+        if (!DropPiece(&pieces.arr[p_idx], gpos, &grid)) {
+          PiecesDestroy(&pieces);
+          GridDestroy(&grid);
           continue;
+        }
         pieces.arr[p_idx].pal_idx = 0;
         ClearSquares(&grid);
         if (DoPiecesFit(&grid, &pieces, rem_levels - 1)) {
@@ -576,13 +593,9 @@ int main(void) {
   SetTargetFPS(60);
 
   Grid grid;
-  grid.arr = malloc(cols * rows * sizeof(*grid.arr));
+  AllocGrid(&grid);
   Pieces pieces;
-  pieces.arr = malloc(num_pieces * sizeof(*pieces.arr));
-  for (int p_idx = 0; p_idx != num_pieces; p_idx++) {
-    pieces.arr[p_idx].shape =
-        malloc(piece_length * piece_length * sizeof(*pieces.arr[p_idx].shape));
-  }
+  AllocPieces(&pieces);
   pieces.canvas = (Canvas){{GridToCanvas((GridPos){cols, 0}).x, 0}};
   bool stop = false;
   GridInit(&grid);
