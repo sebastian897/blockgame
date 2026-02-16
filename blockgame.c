@@ -309,10 +309,9 @@ bool DropPiece(Piece *piece, GridPos gpos, Grid *grid);
 
 bool IsPiecesEmpty(const Pieces *pieces);
 
-bool DoPiecesFit(Grid *grid_ptr, Pieces *pieces_ptr, int rem_levels) {
+
+bool DoPiecesFitRec(Grid *grid_ptr, Pieces *pieces_ptr, int rem_levels) {
   if (IsPiecesEmpty(pieces_ptr) || rem_levels == 0) {
-    PiecesDestroy(pieces_ptr);
-    GridDestroy(grid_ptr);
     return true;
   }
   for (int p_idx = 0; p_idx != num_pieces; p_idx++) {
@@ -330,22 +329,29 @@ bool DoPiecesFit(Grid *grid_ptr, Pieces *pieces_ptr, int rem_levels) {
         }
         pieces.arr[p_idx].pal_idx = 0;
         ClearSquares(&grid);
-        if (DoPiecesFit(&grid, &pieces, rem_levels - 1)) {
-          PiecesDestroy(pieces_ptr);
-          GridDestroy(grid_ptr);
+        if (DoPiecesFitRec(&grid, &pieces, rem_levels - 1)) {
           return true;
         }
+        PiecesDestroy(&pieces);
+        GridDestroy(&grid);
       }
     }
   }
-  PiecesDestroy(pieces_ptr);
-  GridDestroy(grid_ptr);
   return false;
 }
 
-void CanPlacePiece(Pieces *pieces_ptr, Grid *grid_ptr, gamestate *gstate) {
+bool DoPiecesFit(Grid *grid_ptr, Pieces *pieces_ptr, int rem_levels) {
   Grid grid = GridCopy(*grid_ptr);
   Pieces pieces = PiecesCopy(*pieces_ptr);
+
+  bool retval = DoPiecesFitRec(&grid, &pieces, rem_levels);
+
+  PiecesDestroy(&pieces);
+  GridDestroy(&grid);
+  return retval;
+}
+
+void CanPlacePiece(Pieces *pieces, Grid *grid, gamestate *gstate) {
   if (!DoPiecesFit(&grid, &pieces, 1))
     *gstate = game_over; // only 1 level of look ahead
 }
@@ -423,7 +429,7 @@ GridPos GetShadowPos(ScreenPos drag_offset, Grid *grid) {
       SubScreenPos(effective_mouse_pos, drag_offset), grid->canvas));
 }
 
-void BuildPieces(Pieces *pieces_ptr, Grid *grid_ptr) {
+void BuildPieces(Pieces *pieces, Grid *grid) {
   int attempts = 0;
   int prob = square_probability_max;
   uint8_t pal_idxs[ARRAY_LENGTH(palette) - 1];
@@ -433,12 +439,10 @@ void BuildPieces(Pieces *pieces_ptr, Grid *grid_ptr) {
     if (attempts % 10 == 0 && prob > square_probability_min)
       prob--;
     for (int i = 0; i != num_pieces; i++) {
-      BuildPiece(&pieces_ptr->arr[i], prob);
-      pieces_ptr->arr[i].pal_idx = pal_idxs[i];
+      BuildPiece(&pieces->arr[i], prob);
+      pieces->arr[i].pal_idx = pal_idxs[i];
     }
-    Grid grid = GridCopy(*grid_ptr);
-    Pieces pieces = PiecesCopy(*pieces_ptr);
-    if (DoPiecesFit(&grid, &pieces, INT_MAX))
+    if (DoPiecesFit(grid, pieces, INT_MAX))
       break;
   }
   printf("attempts = %d\n", attempts);
