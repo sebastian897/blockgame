@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <time.h>
 
 #define CEIL_DIV(x, y) (((x) + (y) - 1) / (y))
@@ -225,7 +226,7 @@ void GetFullCols(const Grid *grid, bool *full_cols) {
   }
 }
 
-void GetFullRows(const Grid *grid, bool* full_rows) {
+void GetFullRows(const Grid *grid, bool *full_rows) {
   for (int row = 0; row != rows; row++) {
     int rowCount = 0;
     for (int col = 0; col != cols; col++) {
@@ -255,41 +256,86 @@ void ClearSquares(Grid *grid) {
   }
 }
 
+Grid GridCopy(Grid grid) {
+  uint8_t *new_arr = malloc(cols * rows * sizeof(*grid.arr));
+  memcpy(new_arr, grid.arr, cols * rows * sizeof(*grid.arr));
+  grid.arr = new_arr;
+  return grid;
+}
+
+Pieces PiecesCopy(Pieces pieces) {
+  Piece *new_arr = malloc(num_pieces * sizeof(*pieces.arr));
+  memcpy(new_arr, pieces.arr, num_pieces * sizeof(*pieces.arr));
+  for (int p_idx = 0; p_idx != num_pieces; p_idx++) {
+    new_arr[p_idx].shape =
+        malloc(piece_length * piece_length * sizeof(*pieces.arr[p_idx].shape));
+    memcpy(new_arr[p_idx].shape, pieces.arr[p_idx].shape,
+           piece_length * piece_length * sizeof(*pieces.arr[p_idx].shape));
+  }
+  pieces.arr = new_arr;
+  return pieces;
+}
+
+void GridDestroy(Grid *grid) {
+  if (grid->arr != NULL) {
+    free(grid->arr);
+  }
+}
+
+void PiecesDestroy(Pieces *pieces) {
+  if (pieces->arr) {
+    for (int p_idx = 0; p_idx != num_pieces; p_idx++) {
+      free(pieces->arr->shape);
+    }
+    free(pieces->arr);
+  }
+}
+
 bool DropPiece(Piece *piece, GridPos gpos, Grid *grid);
 
 bool IsPiecesEmpty(const Pieces *pieces);
 
-bool DoPiecesFit(Grid grid, Pieces pieces, int rem_levels) {
-  if (IsPiecesEmpty(&pieces) || rem_levels == 0) {
+bool DoPiecesFit(Grid *grid_ptr, Pieces *pieces_ptr, int rem_levels) {
+  if (IsPiecesEmpty(pieces_ptr) || rem_levels == 0) {
+    PiecesDestroy(pieces_ptr);
+    GridDestroy(grid_ptr);
     return true;
   }
   for (int p_idx = 0; p_idx != num_pieces; p_idx++) {
-    if (pieces.arr[p_idx].pal_idx == 0)
+    if (pieces_ptr->arr[p_idx].pal_idx == 0)
       continue;
     for (int col = 0; col != cols; col++) {
       for (int row = 0; row != rows; row++) {
+        Grid grid = GridCopy(*grid_ptr);
+        Pieces pieces = PiecesCopy(*pieces_ptr);
         GridPos gpos = {col, row};
         if (!DropPiece(&pieces.arr[p_idx], gpos, &grid))
           continue;
         pieces.arr[p_idx].pal_idx = 0;
         ClearSquares(&grid);
-        if (DoPiecesFit(grid, pieces, rem_levels - 1)) {
+        if (DoPiecesFit(&grid, &pieces, rem_levels - 1)) {
+          PiecesDestroy(pieces_ptr);
+          GridDestroy(grid_ptr);
           return true;
         }
       }
     }
   }
+  PiecesDestroy(pieces_ptr);
+  GridDestroy(grid_ptr);
   return false;
 }
 
-void CanPlacePiece(Pieces *pieces, Grid *grid, gamestate *gstate) {
-  if (!DoPiecesFit(*grid, *pieces, 1))
+void CanPlacePiece(Pieces *pieces_ptr, Grid *grid_ptr, gamestate *gstate) {
+  Grid grid = GridCopy(*grid_ptr);
+  Pieces pieces = PiecesCopy(*pieces_ptr);
+  if (!DoPiecesFit(&grid, &pieces, 1))
     *gstate = game_over; // only 1 level of look ahead
 }
 
 bool IsTopRowEmpty(Shape shape) {
   for (int col = 0; col != piece_length; col++)
-    if (shape[PIECE_IDX(col,0)])
+    if (shape[PIECE_IDX(col, 0)])
       return false;
   return true;
 }
@@ -303,7 +349,7 @@ bool IsLeftColEmpty(Shape shape) {
 void RemoveTopRow(Shape shape) {
   for (int row = 0; row != piece_length - 1; row++) {
     for (int col = 0; col != piece_length; col++) {
-      shape[PIECE_IDX(col, row)] = shape[PIECE_IDX(col, row+ 1)];
+      shape[PIECE_IDX(col, row)] = shape[PIECE_IDX(col, row + 1)];
     }
   }
   for (int col = 0; col != piece_length; col++) {
@@ -314,7 +360,7 @@ void RemoveTopRow(Shape shape) {
 void RemoveLeftCol(Shape shape) {
   for (int col = 0; col != piece_length - 1; col++) {
     for (int row = 0; row != piece_length; row++) {
-      shape[PIECE_IDX(col, row)] = shape[PIECE_IDX(col+1, row)];
+      shape[PIECE_IDX(col, row)] = shape[PIECE_IDX(col + 1, row)];
     }
   }
   for (int row = 0; row != piece_length; row++) {
@@ -360,7 +406,7 @@ GridPos GetShadowPos(ScreenPos drag_offset, Grid *grid) {
       SubScreenPos(effective_mouse_pos, drag_offset), grid->canvas));
 }
 
-void BuildPieces(Pieces *pieces, Grid *grid) {
+void BuildPieces(Pieces *pieces_ptr, Grid *grid_ptr) {
   int attempts = 0;
   int prob = square_probability_max;
   uint8_t pal_idxs[ARRAY_LENGTH(palette) - 1];
@@ -370,10 +416,12 @@ void BuildPieces(Pieces *pieces, Grid *grid) {
     if (attempts % 10 == 0 && prob > square_probability_min)
       prob--;
     for (int i = 0; i != num_pieces; i++) {
-      BuildPiece(&pieces->arr[i], prob);
-      pieces->arr[i].pal_idx = pal_idxs[i];
+      BuildPiece(&pieces_ptr->arr[i], prob);
+      pieces_ptr->arr[i].pal_idx = pal_idxs[i];
     }
-    if (DoPiecesFit(*grid, *pieces, INT_MAX))
+    Grid grid = GridCopy(*grid_ptr);
+    Pieces pieces = PiecesCopy(*pieces_ptr);
+    if (DoPiecesFit(&grid, &pieces, INT_MAX))
       break;
   }
   printf("attempts = %d\n", attempts);
@@ -409,7 +457,7 @@ bool DropPiece(Piece *piece, GridPos gpos, Grid *grid) {
       if (!piece->shape[PIECE_IDX(col, row)])
         continue;
       GridPos rec_pos = AddGridPos(gpos, (GridPos){col, row});
-      grid->arr[GRID_IDX(rec_pos.x,rec_pos.y)] = piece->pal_idx;
+      grid->arr[GRID_IDX(rec_pos.x, rec_pos.y)] = piece->pal_idx;
     }
   }
   piece->pal_idx = 0;
@@ -555,6 +603,7 @@ int main(void) {
       RenderGrid(&grid);
       DrawPieces(&pieces, &grid);
       EndDrawing();
+      // stop = true;
       break;
     case game_over:
       BeginDrawing();
@@ -572,7 +621,7 @@ int main(void) {
     }
   }
   CloseWindow();
-  free(grid.arr);
-  free(pieces.arr);
+  GridDestroy(&grid);
+  PiecesDestroy(&pieces);
   return 0;
 }
