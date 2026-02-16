@@ -26,7 +26,7 @@ typedef enum gamestate { menu, playing, game_over } gamestate;
 const float windowSize = 0.8;
 const float squareAmount = 0.95;
 int squareLength;
-const float piece_scale_factor = 0.8;
+const float piece_scale_factor = 0.75;
 
 #define MAX_A 255
 bool debug = true;
@@ -35,6 +35,19 @@ Color palette[] = {EMPTY,      MAROON,    ORANGE, DARKGREEN, DARKBLUE,
                    DARKPURPLE, DARKBROWN, RED,    GOLD,      LIME,
                    BLUE,       VIOLET,    BROWN,  PINK,      YELLOW,
                    GREEN,      SKYBLUE,   PURPLE, BEIGE};
+
+void random_pal_idx(uint8_t pal_idxs[ARRAY_LENGTH(palette)-1], int n) {
+  int total = ARRAY_LENGTH(palette)-1;
+  for (int i = 0; i != total; i++) pal_idxs[i] = i+1;
+  for (int i = 0; i != n; i++) {
+    int j = i + rand() % (total - i);
+
+    // swap colors[i] and colors[j]
+    uint8_t temp = pal_idxs[i];
+    pal_idxs[i] = pal_idxs[j];
+    pal_idxs[j] = temp;
+  }
+}
 
 typedef bool Shape[piece_length][piece_length];
 
@@ -332,29 +345,18 @@ GridPos GetShadowPos(ScreenPos drag_offset, Grid *grid) {
       SubScreenPos(effective_mouse_pos, drag_offset), grid->canvas));
 }
 
-bool HasColorBeenUsed(const Pieces *pieces, int cur_idx, uint8_t col_idx) {
-  for (int j = 0; j != cur_idx; j++) {
-    if (pieces->arr[j].pal_idx == col_idx) {
-      return true;
-    }
-  }
-  return false;
-}
-
 void BuildPieces(Pieces *pieces, Grid *grid) {
   int attempts = 0;
   int prob = square_probability_max;
+  uint8_t pal_idxs[ARRAY_LENGTH(palette)-1];
+  random_pal_idx(pal_idxs, num_pieces);
   while (true) {
     attempts++;
     if (attempts % 10 == 0 && prob > square_probability_min)
       prob--;
     for (int i = 0; i != num_pieces; i++) {
       BuildPiece(&pieces->arr[i], prob);
-      uint8_t c;
-      do {
-        c = rand() % (ARRAY_LENGTH(palette) - 1) + 1; // dont chose empty
-      } while (HasColorBeenUsed(pieces, i, c));
-      pieces->arr[i].pal_idx = c;
+      pieces->arr[i].pal_idx = pal_idxs[i];
     }
     if (DoPiecesFit(*grid, *pieces, INT_MAX))
       break;
@@ -422,7 +424,8 @@ ScreenPos GetPieceCentre(ScreenPos piece_top_left) {
                                   squareLength * piece_length / 2});
 }
 
-void DrawPiece(const Piece *piece, ScreenPos piece_pos, int a, float scale_factor) {
+void DrawPiece(const Piece *piece, ScreenPos piece_pos, int a,
+               float scale_factor) {
   Canvas mc = {(ScreenPos){0, 0}};
   for (int col = 0; col != piece_length; col++) {
     for (int row = 0; row != piece_length; row++) {
