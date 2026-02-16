@@ -23,9 +23,10 @@ enum {
 
 typedef enum gamestate { menu, playing, game_over } gamestate;
 
-const double windowSize = 0.8;
-const double squareAmount = 0.95;
+const float windowSize = 0.8;
+const float squareAmount = 0.95;
 int squareLength;
+const float piece_scale_factor = 0.8;
 
 #define MAX_A 255
 bool debug = true;
@@ -93,9 +94,9 @@ CanvasPos GridToCanvas(GridPos gp) {
   return (CanvasPos){gp.x * squareLength, gp.y * squareLength};
 }
 
-double sf = 0.8;
+float sf = 0.8;
 CanvasPos GridToCanvasAtHome(GridPos gp) {
-  double magic = piece_length / 2.0;
+  float magic = piece_length / 2.0;
   return (CanvasPos){
       (gp.x) * squareLength * sf + (1 - sf) * magic * squareLength,
       (gp.y) * squareLength * sf + (1 - sf) * magic * squareLength};
@@ -109,12 +110,12 @@ ScreenPos GridToScreenAtHome(GridPos gp, Canvas c) {
   return CanvasToScreen(GridToCanvasAtHome(gp), c);
 }
 
-Rectangle SceenToRectangle(ScreenPos sp) {
+Rectangle ScreenToRectangle(ScreenPos sp) {
   return (Rectangle){sp.x, sp.y, squareLength * squareAmount,
                      squareLength * squareAmount};
 }
 
-Rectangle SceenToRectangleAtHome(ScreenPos sp) {
+Rectangle ScreenToRectangleAtHome(ScreenPos sp) {
   return (Rectangle){sp.x, sp.y, squareLength * squareAmount * sf,
                      squareLength * squareAmount * sf};
 }
@@ -417,7 +418,7 @@ bool DropPiece(Piece *piece, GridPos gpos, Grid *grid) {
 void RenderGrid(Grid *grid) {
   for (int col = 0; col != cols; col++) {
     for (int row = 0; row != rows; row++) {
-      Rectangle rec = SceenToRectangle(
+      Rectangle rec = ScreenToRectangle(
           CanvasToScreen(GridToCanvas((GridPos){col, row}), grid->canvas));
       Color c;
       c = palette[grid->arr[col][row]];
@@ -425,14 +426,13 @@ void RenderGrid(Grid *grid) {
     }
   }
 }
-void DrawPiece(const Piece *piece, ScreenPos pos, int a, int scale_factor) {
+void DrawPieceOld(const Piece *piece, ScreenPos pos, int a, int scale_factor) {
   Canvas mc = {(ScreenPos){0, 0}};
   for (int col = 0; col != piece_length; col++) {
     for (int row = 0; row != piece_length; row++) {
       if (piece->shape[col][row]) {
-        Rectangle rec =
-            SceenToRectangle(AddScreenPos(
-                               pos, GridToScreen((GridPos){col, row}, mc)));
+        Rectangle rec = ScreenToRectangle(
+            AddScreenPos(pos, GridToScreen((GridPos){col, row}, mc)));
         Color c = palette[piece->pal_idx];
         c.a = a;
         DrawRectangleRec(rec, c);
@@ -441,14 +441,30 @@ void DrawPiece(const Piece *piece, ScreenPos pos, int a, int scale_factor) {
   }
 }
 
-void DrawPieceAtHome(const Piece *piece, ScreenPos pos) {
+Rectangle ScaleIt(Rectangle rect, ScreenPos centre, float scale_factor) {
+  return (Rectangle){centre.x - scale_factor * (centre.x - rect.x),
+                     centre.y - scale_factor * (centre.y - rect.y),
+                     rect.width * scale_factor, rect.height * scale_factor};
+}
+
+ScreenPos GetPieceCentre(ScreenPos piece_top_left) {
+  return AddScreenPos(piece_top_left,
+                      (ScreenPos){squareLength * piece_length / 2,
+                                  squareLength * piece_length / 2});
+}
+
+void DrawPiece(const Piece *piece, ScreenPos piece_pos, int a, float scale_factor) {
   Canvas mc = {(ScreenPos){0, 0}};
   for (int col = 0; col != piece_length; col++) {
     for (int row = 0; row != piece_length; row++) {
       if (piece->shape[col][row]) {
-        Rectangle rec = SceenToRectangleAtHome(
-            AddScreenPos(pos, GridToScreenAtHome((GridPos){col, row}, mc)));
+        ScreenPos rec_pos =
+            AddScreenPos(piece_pos, GridToScreen((GridPos){col, row}, mc));
+        Rectangle unscaled_rect = ScreenToRectangle(rec_pos);
+        ScreenPos centrepos = GetPieceCentre(piece_pos);
+        Rectangle rec = ScaleIt(unscaled_rect, centrepos, scale_factor);
         Color c = palette[piece->pal_idx];
+        c.a = a;
         DrawRectangleRec(rec, c);
       }
     }
@@ -465,19 +481,19 @@ void DrawPieces(Pieces *pieces, Grid *grid) {
       drag_idx = i; // save idx of drag pieces for later drawing
     } else {
       ScreenPos s = CanvasToScreen(GetPieceHomePos(i), pieces->canvas);
-      DrawPieceAtHome(&pieces->arr[i], s);
+      DrawPiece(&pieces->arr[i], s, MAX_A, piece_scale_factor);
     }
   }
   if (drag_idx != -1) {
     GridPos gpos = GetShadowPos(pieces->arr[drag_idx].drag.offset, grid);
     if (DoesPieceFit(&pieces->arr[drag_idx], gpos, grid)) {
       DrawPiece(&pieces->arr[drag_idx], GridToScreen(gpos, grid->canvas),
-                transparency, 100);
+                transparency, 1);
     }
 
     ScreenPos piece_pos = SubScreenPos(
         mousePos, pieces->arr[drag_idx].drag.offset); // draw dragging piece
-    DrawPiece(&pieces->arr[drag_idx], piece_pos, MAX_A, 100);
+    DrawPiece(&pieces->arr[drag_idx], piece_pos, MAX_A, 1);
   }
 }
 
