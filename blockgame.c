@@ -278,11 +278,11 @@ Pieces PiecesCopy(Pieces pieces) {
   return pieces;
 }
 
-void AllocGrid(Grid* grid) {
+void AllocGrid(Grid *grid) {
   grid->arr = malloc(cols * rows * sizeof(*grid->arr));
 }
 
-void AllocPieces(Pieces* pieces) {
+void AllocPieces(Pieces *pieces) {
   pieces->arr = malloc(num_pieces * sizeof(*pieces->arr));
   for (int p_idx = 0; p_idx != num_pieces; p_idx++) {
     pieces->arr[p_idx].shape =
@@ -309,8 +309,7 @@ bool DropPiece(Piece *piece, GridPos gpos, Grid *grid);
 
 bool IsPiecesEmpty(const Pieces *pieces);
 
-
-bool DoPiecesFitRec(Grid *grid_ptr, Pieces *pieces_ptr, int rem_levels) {
+bool DoPiecesFitRecurse(Grid *grid_ptr, Pieces *pieces_ptr, int rem_levels) {
   if (IsPiecesEmpty(pieces_ptr) || rem_levels == 0) {
     return true;
   }
@@ -329,11 +328,11 @@ bool DoPiecesFitRec(Grid *grid_ptr, Pieces *pieces_ptr, int rem_levels) {
         }
         pieces.arr[p_idx].pal_idx = 0;
         ClearSquares(&grid);
-        if (DoPiecesFitRec(&grid, &pieces, rem_levels - 1)) {
-          return true;
-        }
+        bool success = DoPiecesFitRecurse(&grid, &pieces, rem_levels - 1);
         PiecesDestroy(&pieces);
         GridDestroy(&grid);
+        if (success)
+          return true;
       }
     }
   }
@@ -344,7 +343,7 @@ bool DoPiecesFit(Grid *grid_ptr, Pieces *pieces_ptr, int rem_levels) {
   Grid grid = GridCopy(*grid_ptr);
   Pieces pieces = PiecesCopy(*pieces_ptr);
 
-  bool retval = DoPiecesFitRec(&grid, &pieces, rem_levels);
+  bool retval = DoPiecesFitRecurse(&grid, &pieces, rem_levels);
 
   PiecesDestroy(&pieces);
   GridDestroy(&grid);
@@ -352,7 +351,7 @@ bool DoPiecesFit(Grid *grid_ptr, Pieces *pieces_ptr, int rem_levels) {
 }
 
 void CanPlacePiece(Pieces *pieces, Grid *grid, gamestate *gstate) {
-  if (!DoPiecesFit(&grid, &pieces, 1))
+  if (!DoPiecesFit(grid, pieces, 1))
     *gstate = game_over; // only 1 level of look ahead
 }
 
