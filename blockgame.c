@@ -15,20 +15,18 @@ int cols = 9;
 int piece_length = 3;
 int num_pieces = 3;
 int pieces_per_grid_length;
-int num_piece_rows;
+int screen_width;
+int screen_height;
+bool pieces_at_bottom;
 
 #define GRID_IDX(col, row) ((col) * rows + (row))
 #define PIECE_IDX(col, row) ((col) * piece_length + (row))
 
-void Recalc() {
-  pieces_per_grid_length = rows / piece_length;
-  num_piece_rows = CEIL_DIV(num_pieces, pieces_per_grid_length);
-}
-
 enum {
   square_probability_max = 75,
   square_probability_min = 20,
-  transparency = 127
+  transparency = 127,
+  phone_bottom_offset = 1
 };
 
 typedef enum gamestate { menu, playing, game_over } gamestate;
@@ -153,12 +151,44 @@ GridPos AddGridPos(GridPos cp1, GridPos cp2) {
   return (GridPos){cp1.x + cp2.x, cp1.y + cp2.y};
 }
 
-int CalculateSquareSize(void) {
-  const int screenWidth = GetMonitorWidth(GetCurrentMonitor());
-  const int screenHeight = GetMonitorHeight(GetCurrentMonitor());
-  int maxTall = screenHeight / (rows);
-  int maxWide = screenWidth / (cols + num_piece_rows);
-  return (maxTall < maxWide ? maxTall : maxWide) * windowSize;
+void SwapGrid(int width, int height) {
+  if ((width > height && rows > cols) || (width < height && rows < cols)) {
+    int temp = cols;
+    cols = rows;
+    rows = temp;
+  }
+}
+
+void ReCalc(void) {
+
+#if defined(PLATFORM_ANDROID)
+  const int screenWidth = GetScreenWidth();
+  const int screenHeight = GetScreenHeight();
+#else
+  const int screenWidth = GetMonitorWidth(GetCurrentMonitor()) * windowSize / 2;
+  const int screenHeight = GetMonitorHeight(GetCurrentMonitor()) * windowSize;
+#endif
+  SwapGrid(screenWidth, screenHeight);
+  if (screenHeight > screenWidth) {
+    pieces_per_grid_length = cols / piece_length;
+    int num_piece_rows = CEIL_DIV(num_pieces, pieces_per_grid_length);
+    int maxTall = screenHeight / (rows + num_piece_rows * piece_length);
+    int maxWide = screenWidth / (cols);
+    squareLength = (maxTall < maxWide ? maxTall : maxWide);
+    screen_width = squareLength * cols;
+    screen_height = squareLength * (rows + num_piece_rows * piece_length);
+    pieces_at_bottom = true;
+  } else {
+    pieces_per_grid_length = rows / piece_length;
+    int num_piece_cols = CEIL_DIV(num_pieces, pieces_per_grid_length);
+    int maxTall = screenHeight / (rows);
+    int maxWide = screenWidth / (cols + num_piece_cols * piece_length);
+    squareLength = (maxTall < maxWide ? maxTall : maxWide);
+    screen_width = squareLength * (cols + num_piece_cols * piece_length);
+    screen_height = squareLength * rows;
+    pieces_at_bottom = false;
+  }
+  SetWindowSize(screen_width, screen_height);
 }
 
 bool MouseCollisionDetected(ScreenPos mouse, ScreenPos objpos, Size size) {
@@ -416,9 +446,14 @@ void BuildPiece(Piece *piece, int prob) {
 }
 
 CanvasPos GetPieceHomePos(int piece_idx) {
-  return GridToCanvas(
-      (GridPos){(piece_idx / pieces_per_grid_length * piece_length),
-                (piece_idx % pieces_per_grid_length) * piece_length});
+  if (pieces_at_bottom) {
+    return GridToCanvas(
+        (GridPos){(piece_idx % pieces_per_grid_length) * piece_length,
+                  (piece_idx / pieces_per_grid_length * piece_length)});
+  } else
+    return GridToCanvas(
+        (GridPos){(piece_idx / pieces_per_grid_length * piece_length),
+                  (piece_idx % pieces_per_grid_length) * piece_length});
 }
 
 GridPos GetShadowPos(ScreenPos drag_offset, Grid *grid) {
@@ -462,7 +497,6 @@ void RefillPieces(Pieces *pieces, Grid *grid) {
 }
 
 void GridInit(Grid *grid) {
-  grid->canvas = (Canvas){{0, 0}};
   for (int col = 0; col != cols; col++) {
     for (int row = 0; row != rows; row++) {
       grid->arr[GRID_IDX(col, row)] = 0; // empty index = 0
@@ -586,20 +620,56 @@ void OnMouseRelease(Pieces *pieces, Grid *grid) {
 
 int main(void) {
   srand(1);
+#if defined(PLATFORM_ANDROID)
+  InitWindow(0, 0, "BlockGame");
+#else
   InitWindow(800, 600, "BlockGame");
-  Recalc();
+  int x = GetMonitorWidth(GetCurrentMonitor()) * (1 - windowSize) / 2;
+  int y = GetMonitorHeight(GetCurrentMonitor()) * (1 - windowSize) / 2;
+  SetWindowPosition(x, y);
+#endif
   // ToggleFullscreen();
-  squareLength = CalculateSquareSize();
-  int screen_width = squareLength * (cols + num_piece_rows * piece_length);
-  int screen_height = squareLength * rows;
-  SetWindowSize(screen_width, screen_height);
+  ReCalc();
   SetTargetFPS(60);
 
   Grid grid;
   AllocGrid(&grid);
   Pieces pieces;
   AllocPieces(&pieces);
-  pieces.canvas = (Canvas){{GridToCanvas((GridPos){cols, 0}).x, 0}};
+  grid.canvas = (Canvas){{0, 0}};
+
+  if (pieces_at_bottom) {
+#if defined(PLATFORM_ANDROID)
+    printf("GetScreenHeight = %d\n", GetScreenHeight());
+    int canvas_offset =
+        SubCanvasPos(
+            (CanvasPos){0, GetScreenHeight()},
+            GridToCanvas((GridPos){
+                0, pieces_per_grid_length / num_pieces * piece_length + rows}))
+            .y /
+        2;
+    grid.canvas =
+        (Canvas){0,
+                 (CanvasPos){0, canvas_offset}
+                        .y};
+    pieces.canvas =
+        (Canvas){0,
+                 AddCanvasPos((CanvasPos){0, canvas_offset}, GridToCanvas((GridPos){0,
+                                               rows}))
+                     .y};
+#else
+    printf("GetScreenHeight = %d\n", GetScreenHeight());
+    pieces.canvas = (Canvas){
+        0, (SubCanvasPos(
+                (CanvasPos){0, GetScreenHeight()},
+                GridToCanvas((GridPos){0, pieces_per_grid_length / num_pieces *
+                                                  piece_length +
+                                              phone_bottom_offset})))
+               .y};
+    // pieces.canvas = (Canvas){0, GridToCanvas((GridPos){0, rows}).y};
+#endif
+  } else
+    pieces.canvas = (Canvas){{GridToCanvas((GridPos){cols, 0}).x, 0}};
   bool stop = false;
   GridInit(&grid);
   BuildPieces(&pieces, &grid);
