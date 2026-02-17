@@ -115,8 +115,7 @@ typedef struct Pieces {
   Canvas canvas;
 } Pieces;
 
-Canvas origin = {{0, 0}, {0, 0}};
-
+Canvas origin = {{0, 0}, {0, 0}, NULL};
 
 void ShiftCanvas(Canvas* head, ScreenPos offest) {
   Canvas* curr = head;
@@ -280,28 +279,12 @@ void PositionCanvases(Grid* grid, Pieces* pieces, Score* score) {
                  GridToPixel((GridSize){cols, CEIL_DIV(num_pieces, pieces_per_grid_length) * piece_length}),
                  NULL};
     ShiftCanvas(StackAbove(&score->canvas, StackAbove(&grid->canvas, &pieces->canvas)), (ScreenPos){(GetScreenWidth()-grid->canvas.size.width)/2, (GetScreenHeight()-(score->canvas.size.height+grid->canvas.size.height+pieces->canvas.size.height))/2});
-
-    // ScreenPos pieces_and_grid = GridToScreen(
-    //     (GridPos){cols, num_pieces / pieces_per_grid_length * piece_length + (rows)}, origin);
-    // ScreenPos canvas_offset = AddScreenPos(
-    //     ScaleScreenPos(SubScreenPos((ScreenPos){GetScreenWidth(), GetScreenHeight() -
-    //     squareLength},
-    //                                 pieces_and_grid),
-    //                    0.5),
-    //     GridToScreen((GridPos){0, 1}, origin));
-    // pieces.canvas = (Canvas){AddScreenPos(canvas_offset, GridToScreen((GridPos){0, rows},
-    // origin))}; grid.canvas = (Canvas){canvas_offset};
-    // pieces->canvas = (Canvas){0, GridToCanvas((GridPos){0, rows + 1}).y};
-    // grid->canvas = (Canvas){GridToScreen((GridPos){0, 1}, origin)};
-// {cols, num_pieces / pieces_per_grid_length * piece_length + (rows+1)}
   } else {
     pieces->canvas =
         (Canvas){{0},
                  GridToPixel((GridSize){num_pieces / pieces_per_grid_length * piece_length, rows}),
                  NULL};
     StackAbove(&score->canvas, StackLeft(&grid->canvas, &pieces->canvas));
-    // pieces->canvas = (Canvas){GridToScreen((GridPos){cols, 1}, origin)};
-    // grid->canvas = (Canvas){GridToScreen((GridPos){0, 1}, origin)};
   }
 }
 
