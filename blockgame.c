@@ -117,16 +117,20 @@ typedef struct Pieces {
 
 Canvas origin = {{0, 0}, {0, 0}};
 
+
+void ShiftCanvas(Canvas* head, ScreenPos offest) {
+  Canvas* curr = head;
+    while (curr != NULL) {
+      curr->origin.x+= offest.x;
+      curr->origin.y+= offest.y;
+    curr = curr->next;
+  }
+}
+
 Canvas* PrependCanvas(Canvas* head, Canvas* new) {
   new->next = head;
   return new;
 }
-
-// Canvas* CombineCanvasHorizontally(Canvas* left, Canvas* right) {
-//   Canvas* comb = left;
-//   comb->size.height += right->size.width;
-//   return comb;
-// }
 
 Canvas* StackAbove(Canvas* top, Canvas* bot) {
   int dx = bot->origin.x - top->origin.x;
@@ -150,12 +154,6 @@ Canvas* StackAbove(Canvas* top, Canvas* bot) {
   return top;
 }
 
-// Canvas* StackBelow(Canvas* top, Canvas* bot) {
-//   bot->origin.x = top->origin.x;
-//   bot->origin.y += top->origin.y + top->size.height;
-//   bot->size.width = top->size.width;
-//   return PrependCanvas(bot, top);
-// }
 Canvas* StackLeft(Canvas* left, Canvas* right) {
   int dx = right->origin.x - left->origin.x;
   int dy = right->origin.y - left->origin.y;
@@ -176,29 +174,6 @@ Canvas* StackLeft(Canvas* left, Canvas* right) {
   }
   PrependCanvas(right, left);
   return left;
-}
-
-// Canvas* StackLeft(Canvas* left, Canvas* right) {
-//   left->origin.y = right->origin.y;
-//   left->origin.x = right->origin.x;
-//   right->origin.x += left->size.width;
-//   left->size.height = right->size.height;
-//   return PrependCanvas(right, left);
-// }
-
-// Canvas* StackRight(Canvas* left, Canvas* right) {
-//   right->origin.x = left->origin.x + left->size.width;
-//   right->origin.y = left->origin.y;
-//   right->size.height = left->size.height;
-//   return PrependCanvas(right, left);
-// }
-
-ScreenPos GetBottom(Canvas c) {
-  return (ScreenPos){c.origin.x, c.origin.y + c.size.height};
-}
-
-ScreenPos GetRight(Canvas c) {
-  return (ScreenPos){c.origin.x + c.size.width, c.origin.y};
 }
 
 PixelSize GridToPixel(GridSize size) {
@@ -267,7 +242,7 @@ void ReCalc(void) {
   const int screenWidth = GetScreenWidth();
   const int screenHeight = GetScreenHeight();
 #else
-  const int screenWidth = GetMonitorWidth(GetCurrentMonitor()) * windowSize;
+  const int screenWidth = GetMonitorWidth(GetCurrentMonitor()) * windowSize/2;
   const int screenHeight = GetMonitorHeight(GetCurrentMonitor()) * windowSize;
 #endif
   SwapGrid(screenWidth, screenHeight);
@@ -300,11 +275,11 @@ void PositionCanvases(Grid* grid, Pieces* pieces, Score* score) {
   score->canvas = (Canvas){{0}, GridToPixel((GridSize){cols, 1}), NULL};
   grid->canvas = (Canvas){{0}, GridToPixel((GridSize){cols, rows}), NULL};
   if (pieces_at_bottom) {
-#if defined(PLATFORM_DESKTOP)
-    // pieces->canvas = (Canvas){
-    //     {0}, GridToPixel((GridSize){num_pieces / pieces_per_grid_length * piece_length, 0})};
-    // Canvas* grid_pieces = StackRight(&grid->canvas, &pieces->canvas);
-    // StackAbove(&score->canvas, grid_pieces);
+    pieces->canvas =
+        (Canvas){{0},
+                 GridToPixel((GridSize){cols, CEIL_DIV(num_pieces, pieces_per_grid_length) * piece_length}),
+                 NULL};
+    ShiftCanvas(StackAbove(&score->canvas, StackAbove(&grid->canvas, &pieces->canvas)), (ScreenPos){(GetScreenWidth()-grid->canvas.size.width)/2, (GetScreenHeight()-(score->canvas.size.height+grid->canvas.size.height+pieces->canvas.size.height))/2});
 
     // ScreenPos pieces_and_grid = GridToScreen(
     //     (GridPos){cols, num_pieces / pieces_per_grid_length * piece_length + (rows)}, origin);
@@ -316,16 +291,15 @@ void PositionCanvases(Grid* grid, Pieces* pieces, Score* score) {
     //     GridToScreen((GridPos){0, 1}, origin));
     // pieces.canvas = (Canvas){AddScreenPos(canvas_offset, GridToScreen((GridPos){0, rows},
     // origin))}; grid.canvas = (Canvas){canvas_offset};
-#else
     // pieces->canvas = (Canvas){0, GridToCanvas((GridPos){0, rows + 1}).y};
     // grid->canvas = (Canvas){GridToScreen((GridPos){0, 1}, origin)};
-#endif
+// {cols, num_pieces / pieces_per_grid_length * piece_length + (rows+1)}
   } else {
     pieces->canvas =
         (Canvas){{0},
                  GridToPixel((GridSize){num_pieces / pieces_per_grid_length * piece_length, rows}),
                  NULL};
-    Canvas* total_canvases = StackAbove(&score->canvas, StackLeft(&grid->canvas, &pieces->canvas));
+    StackAbove(&score->canvas, StackLeft(&grid->canvas, &pieces->canvas));
     // pieces->canvas = (Canvas){GridToScreen((GridPos){cols, 1}, origin)};
     // grid->canvas = (Canvas){GridToScreen((GridPos){0, 1}, origin)};
   }
