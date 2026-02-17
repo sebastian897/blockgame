@@ -10,10 +10,10 @@
 #define CEIL_DIV(x, y) (((x) + (y) - 1) / (y))
 #define ARRAY_LENGTH(x) (sizeof(x) / sizeof((x)[0]))
 
-int rows = 9;
-int cols = 9;
+int rows = 15;
+int cols = 4;
 int piece_length = 3;
-int num_pieces = 3;
+int num_pieces = 4;
 int pieces_per_grid_length;
 int screen_width;
 int screen_height;
@@ -34,7 +34,7 @@ typedef enum gamestate { menu, playing, game_over } gamestate;
 const float windowSize = 0.8;
 const float squareAmount = 0.95;
 int squareLength;
-const float piece_scale_factor = 0.75;
+const float piece_scale_factor = 0.8;
 
 #define MAX_A 255
 bool debug = true;
@@ -88,7 +88,7 @@ typedef struct GridPos {
 
 typedef struct Drag {
   bool dragging;
-  ScreenPos offset;
+  ScreenPos origin;
 } Drag;
 
 typedef struct Piece {
@@ -107,6 +107,14 @@ typedef struct Size {
   int width;
   int height;
 } Size;
+
+ScreenPos ScaleScreenPos(ScreenPos spos, float scale_factor) {
+  return (ScreenPos){spos.x * scale_factor, spos.y * scale_factor};
+}
+
+CanvasPos ScaleCanvasPos(CanvasPos cpos, float scale_factor) {
+  return (CanvasPos){cpos.x * scale_factor, cpos.y * scale_factor};
+}
 
 ScreenPos CanvasToScreen(CanvasPos cpos, Canvas c) {
   return (ScreenPos){cpos.x + c.origin.x, cpos.y + c.origin.y};
@@ -165,7 +173,7 @@ void ReCalc(void) {
   const int screenWidth = GetScreenWidth();
   const int screenHeight = GetScreenHeight();
 #else
-  const int screenWidth = GetMonitorWidth(GetCurrentMonitor()) * windowSize ;
+  const int screenWidth = GetMonitorWidth(GetCurrentMonitor()) * windowSize;
   const int screenHeight = GetMonitorHeight(GetCurrentMonitor()) * windowSize;
 #endif
   SwapGrid(screenWidth, screenHeight);
@@ -456,12 +464,11 @@ CanvasPos GetPieceHomePos(int piece_idx) {
                   (piece_idx % pieces_per_grid_length) * piece_length});
 }
 
-GridPos GetShadowPos(ScreenPos drag_offset, Grid *grid) {
-  ScreenPos effective_mouse_pos = {GetMouseX() +
-                                       squareLength / 2, // draw shadow
-                                   GetMouseY() + squareLength / 2};
-  return CanvasToGrid(ScreenToCanvas(
-      SubScreenPos(effective_mouse_pos, drag_offset), grid->canvas));
+GridPos GetShadowPos(ScreenPos spos, Grid *grid) {
+  ScreenPos effective_dropping_pos =
+      AddScreenPos(spos, (ScreenPos){squareLength / 2, // draw shadow
+                                     +squareLength / 2});
+  return CanvasToGrid(ScreenToCanvas(effective_dropping_pos, grid->canvas));
 }
 
 void BuildPieces(Pieces *pieces, Grid *grid) {
@@ -559,8 +566,20 @@ void DrawPiece(const Piece *piece, ScreenPos piece_pos, int a,
   }
 }
 
-void DrawPieces(Pieces *pieces, Grid *grid) {
+ScreenPos GetDraggingPiecePos(const Pieces *pieces, int drag_idx) {
+#if defined(PLATFORM_ANDROID)
+  float sf = 2;
+#else
+  float sf = 1;
+#endif
   ScreenPos mousePos = {GetMouseX(), GetMouseY()};
+  return AddScreenPos(
+      CanvasToScreen(GetPieceHomePos(drag_idx), pieces->canvas),
+      ScaleScreenPos(SubScreenPos(mousePos, pieces->arr[drag_idx].drag.origin),
+                     sf));
+}
+
+void DrawPieces(Pieces *pieces, Grid *grid) {
   int drag_idx = -1;
   for (int i = 0; i != num_pieces; i++) {
     if (pieces->arr[i].pal_idx == 0)
@@ -573,14 +592,13 @@ void DrawPieces(Pieces *pieces, Grid *grid) {
     }
   }
   if (drag_idx != -1) {
-    GridPos gpos = GetShadowPos(pieces->arr[drag_idx].drag.offset, grid);
+    ScreenPos piece_pos = GetDraggingPiecePos(pieces, drag_idx);
+    GridPos gpos = GetShadowPos(piece_pos, grid);
     if (DoesPieceFit(&pieces->arr[drag_idx], gpos, grid)) {
       DrawPiece(&pieces->arr[drag_idx], GridToScreen(gpos, grid->canvas),
                 transparency, 1);
     }
 
-    ScreenPos piece_pos = SubScreenPos(
-        mousePos, pieces->arr[drag_idx].drag.offset); // draw dragging piece
     DrawPiece(&pieces->arr[drag_idx], piece_pos, MAX_A, 1);
   }
 }
@@ -597,7 +615,7 @@ void OnMouseClick(Pieces *pieces) {
             mousePos, p_origin,
             (Size){piece_length * squareLength, piece_length * squareLength})) {
       pieces->arr[i].drag.dragging = true;
-      pieces->arr[i].drag.offset = SubScreenPos(mousePos, p_origin);
+      pieces->arr[i].drag.origin = mousePos;
       return;
     }
   }
@@ -608,7 +626,8 @@ void OnMouseRelease(Pieces *pieces, Grid *grid) {
     if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON) &&
         pieces->arr[p_idx].drag.dragging) {
       if (pieces->arr[p_idx].drag.dragging) {
-        GridPos gpos = GetShadowPos(pieces->arr[p_idx].drag.offset, grid);
+        ScreenPos piece_pos = GetDraggingPiecePos(pieces, p_idx);
+        GridPos gpos = GetShadowPos(piece_pos, grid);
         if (DoesPieceFit(&pieces->arr[p_idx], gpos, grid))
           DropPiece(&pieces->arr[p_idx], gpos, grid);
         pieces->arr[p_idx].drag.dragging = false;
@@ -637,26 +656,24 @@ int main(void) {
   Pieces pieces;
   AllocPieces(&pieces);
   grid.canvas = (Canvas){{0, 0}};
+  Canvas origin = {0, 0};
 
   if (pieces_at_bottom) {
 #if defined(PLATFORM_ANDROID)
     printf("GetScreenHeight = %d\n", GetScreenHeight());
-    int canvas_offset =
-        SubCanvasPos(
-            (CanvasPos){0, GetScreenHeight()},
-            GridToCanvas((GridPos){
-                0, pieces_per_grid_length / num_pieces * piece_length + rows}))
-            .y /
-        2;
-    grid.canvas =
-        (Canvas){0,
-                 (CanvasPos){0, canvas_offset}
-                        .y};
-    pieces.canvas =
-        (Canvas){0,
-                 AddCanvasPos((CanvasPos){0, canvas_offset}, GridToCanvas((GridPos){0,
-                                               rows}))
-                     .y};
+    ScreenPos canvas_offset = ScaleScreenPos(
+        SubScreenPos(
+            (ScreenPos){GetScreenWidth(), GetScreenHeight()},
+            GridToScreen(
+                (GridPos){cols ,
+                          num_pieces / pieces_per_grid_length * piece_length +
+                              rows},
+                origin)),
+        0.5);
+
+    grid.canvas = (Canvas){canvas_offset};
+    pieces.canvas = (Canvas){
+        AddScreenPos(canvas_offset, GridToScreen((GridPos){0, rows}, origin))};
 #else
     pieces.canvas = (Canvas){0, GridToCanvas((GridPos){0, rows}).y};
 #endif
