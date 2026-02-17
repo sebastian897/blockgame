@@ -11,8 +11,8 @@
 #define CEIL_DIV(x, y) (((x) + (y) - 1) / (y))
 #define ARRAY_LENGTH(x) (sizeof(x) / sizeof((x)[0]))
 
-int rows = 15;
-int cols = 4;
+int rows = 9;
+int cols = 9;
 int piece_length = 3;
 int num_pieces = 4;
 int pieces_per_grid_length;
@@ -63,13 +63,20 @@ typedef struct ScreenPos {
   int y;
 } ScreenPos;
 
-typedef struct Size {
+typedef struct PixelSize {
   int width;
   int height;
-} Size;
+} PixelSize;
+
+typedef struct GridSize {
+  int width;
+  int height;
+} GridSize;
 
 typedef struct Canvas {
   ScreenPos origin;
+  PixelSize size;
+  struct Canvas* next;
 } Canvas;
 
 typedef struct Grid {
@@ -108,7 +115,95 @@ typedef struct Pieces {
   Canvas canvas;
 } Pieces;
 
-Canvas origin = {(ScreenPos){0, 0}};
+Canvas origin = {{0, 0}, {0, 0}};
+
+Canvas* PrependCanvas(Canvas* head, Canvas* new) {
+  new->next = head;
+  return new;
+}
+
+// Canvas* CombineCanvasHorizontally(Canvas* left, Canvas* right) {
+//   Canvas* comb = left;
+//   comb->size.height += right->size.width;
+//   return comb;
+// }
+
+Canvas* StackAbove(Canvas* top, Canvas* bot) {
+  int dx = bot->origin.x - top->origin.x;
+  int dy = bot->origin.y - top->origin.y;
+  int max_height = 0;
+  Canvas* curr = top;
+  while (curr != NULL) {
+    int total_height = curr->size.height + (curr->origin.y - top->origin.y);
+    if (total_height > max_height) max_height = total_height;
+    curr = curr->next;
+  }
+
+  curr = bot;
+  while (curr != NULL) {
+    curr->origin.x -= dx;
+    curr->origin.y -= dy;
+    curr->origin.y += max_height;
+    curr = curr->next;
+  }
+  PrependCanvas(bot, top);
+  return top;
+}
+
+// Canvas* StackBelow(Canvas* top, Canvas* bot) {
+//   bot->origin.x = top->origin.x;
+//   bot->origin.y += top->origin.y + top->size.height;
+//   bot->size.width = top->size.width;
+//   return PrependCanvas(bot, top);
+// }
+Canvas* StackLeft(Canvas* left, Canvas* right) {
+  int dx = right->origin.x - left->origin.x;
+  int dy = right->origin.y - left->origin.y;
+  int max_width = 0;
+  Canvas* curr = left;
+  while (curr != NULL) {
+    int total_width = curr->size.width + (curr->origin.x - left->origin.x);
+    if (total_width > max_width) max_width = total_width;
+    curr = curr->next;
+  }
+
+  curr = right;
+  while (curr != NULL) {
+    curr->origin.x -= dx;
+    curr->origin.y -= dy;
+    curr->origin.x += max_width;
+    curr = curr->next;
+  }
+  PrependCanvas(right, left);
+  return left;
+}
+
+// Canvas* StackLeft(Canvas* left, Canvas* right) {
+//   left->origin.y = right->origin.y;
+//   left->origin.x = right->origin.x;
+//   right->origin.x += left->size.width;
+//   left->size.height = right->size.height;
+//   return PrependCanvas(right, left);
+// }
+
+// Canvas* StackRight(Canvas* left, Canvas* right) {
+//   right->origin.x = left->origin.x + left->size.width;
+//   right->origin.y = left->origin.y;
+//   right->size.height = left->size.height;
+//   return PrependCanvas(right, left);
+// }
+
+ScreenPos GetBottom(Canvas c) {
+  return (ScreenPos){c.origin.x, c.origin.y + c.size.height};
+}
+
+ScreenPos GetRight(Canvas c) {
+  return (ScreenPos){c.origin.x + c.size.width, c.origin.y};
+}
+
+PixelSize GridToPixel(GridSize size) {
+  return (PixelSize){size.width * squareLength, size.height * squareLength};
+}
 
 ScreenPos ScaleScreenPos(ScreenPos spos, float scale_factor) {
   return (ScreenPos){spos.x * scale_factor, spos.y * scale_factor};
@@ -195,12 +290,48 @@ void ReCalc(void) {
     screen_height = squareLength * (rows + 1);
     pieces_at_bottom = false;
   }
+
 #if defined(PLATFORM_DESKTOP)
   SetWindowSize(screen_width, screen_height);
 #endif
 }
 
-bool MouseCollisionDetected(ScreenPos mouse, ScreenPos objpos, Size size) {
+void PositionCanvases(Grid* grid, Pieces* pieces, Score* score) {
+  score->canvas = (Canvas){{0}, GridToPixel((GridSize){cols, 1}), NULL};
+  grid->canvas = (Canvas){{0}, GridToPixel((GridSize){cols, rows}), NULL};
+  if (pieces_at_bottom) {
+#if defined(PLATFORM_DESKTOP)
+    // pieces->canvas = (Canvas){
+    //     {0}, GridToPixel((GridSize){num_pieces / pieces_per_grid_length * piece_length, 0})};
+    // Canvas* grid_pieces = StackRight(&grid->canvas, &pieces->canvas);
+    // StackAbove(&score->canvas, grid_pieces);
+
+    // ScreenPos pieces_and_grid = GridToScreen(
+    //     (GridPos){cols, num_pieces / pieces_per_grid_length * piece_length + (rows)}, origin);
+    // ScreenPos canvas_offset = AddScreenPos(
+    //     ScaleScreenPos(SubScreenPos((ScreenPos){GetScreenWidth(), GetScreenHeight() -
+    //     squareLength},
+    //                                 pieces_and_grid),
+    //                    0.5),
+    //     GridToScreen((GridPos){0, 1}, origin));
+    // pieces.canvas = (Canvas){AddScreenPos(canvas_offset, GridToScreen((GridPos){0, rows},
+    // origin))}; grid.canvas = (Canvas){canvas_offset};
+#else
+    // pieces->canvas = (Canvas){0, GridToCanvas((GridPos){0, rows + 1}).y};
+    // grid->canvas = (Canvas){GridToScreen((GridPos){0, 1}, origin)};
+#endif
+  } else {
+    pieces->canvas =
+        (Canvas){{0},
+                 GridToPixel((GridSize){num_pieces / pieces_per_grid_length * piece_length, rows}),
+                 NULL};
+    Canvas* total_canvases = StackAbove(&score->canvas, StackLeft(&grid->canvas, &pieces->canvas));
+    // pieces->canvas = (Canvas){GridToScreen((GridPos){cols, 1}, origin)};
+    // grid->canvas = (Canvas){GridToScreen((GridPos){0, 1}, origin)};
+  }
+}
+
+bool MouseCollisionDetected(ScreenPos mouse, ScreenPos objpos, PixelSize size) {
   if (mouse.x > objpos.x && mouse.x < objpos.x + size.width && mouse.y > objpos.y &&
       mouse.y < objpos.y + size.height)
     return true;
@@ -212,8 +343,8 @@ bool DoesCoordFit(int coord, int bound, int size) {
   return true;
 }
 
-Size GetPieceSize(const Piece* piece) {
-  Size size = {0, 0};
+PixelSize GetPieceSize(const Piece* piece) {
+  PixelSize size = {0, 0};
   for (int col = 0; col != piece_length; col++) {
     for (int row = 0; row != piece_length; row++) {
       if (piece->shape[PIECE_IDX(col, row)]) {
@@ -241,7 +372,7 @@ bool IsSpaceFree(const Grid* grid, const Piece* piece, GridPos gpos) {
 }
 
 bool DoesPieceFit(const Grid* grid, const Piece* piece, GridPos gpos) {
-  Size size = GetPieceSize(piece);
+  PixelSize size = GetPieceSize(piece);
   return DoesCoordFit(gpos.x, cols, size.width) && DoesCoordFit(gpos.y, rows, size.height) &&
          IsSpaceFree(grid, piece, gpos);
 }
@@ -541,11 +672,10 @@ ScreenPos GetPieceCentre(ScreenPos piece_top_left) {
 }
 
 void DrawPiece(const Piece* piece, ScreenPos piece_pos, int a, float scale_factor) {
-  Canvas mc = {(ScreenPos){0, 0}};
   for (int col = 0; col != piece_length; col++) {
     for (int row = 0; row != piece_length; row++) {
       if (piece->shape[PIECE_IDX(col, row)]) {
-        ScreenPos rec_pos = AddScreenPos(piece_pos, GridToScreen((GridPos){col, row}, mc));
+        ScreenPos rec_pos = AddScreenPos(piece_pos, GridToScreen((GridPos){col, row}, origin));
         Rectangle unscaled_rect = ScreenToRectangle(rec_pos);
         ScreenPos centrepos = GetPieceCentre(piece_pos);
         Rectangle rec = ScaleRectangle(unscaled_rect, centrepos, scale_factor);
@@ -597,8 +727,9 @@ void OnMouseClick(Pieces* pieces) {
   for (int i = 0; i != num_pieces; i++) {
     if (pieces->arr[i].pal_idx == 0) continue;
     ScreenPos p_origin = CanvasToScreen(GetPieceHomePos(i), pieces->canvas);
-    if (MouseCollisionDetected(mousePos, p_origin,
-                               (Size){piece_length * squareLength, piece_length * squareLength})) {
+    if (MouseCollisionDetected(
+            mousePos, p_origin,
+            (PixelSize){piece_length * squareLength, piece_length * squareLength})) {
       pieces->arr[i].drag.dragging = true;
       pieces->arr[i].drag.origin = mousePos;
       return;
@@ -623,6 +754,11 @@ void OnMouseRelease(Grid* grid, Pieces* pieces) {
 
 int main(void) {
   srand(time(NULL));
+  SetTargetFPS(60);
+  Score score = {0};
+  Grid grid = GridCreate();
+  Pieces pieces = PiecesCreate();
+
 #if defined(PLATFORM_ANDROID)
   InitWindow(0, 0, "BlockGame");
 #else
@@ -632,31 +768,7 @@ int main(void) {
   SetWindowPosition(x, y);
 #endif
   ReCalc();
-  SetTargetFPS(60);
-
-  Score score = {0, (Canvas){(ScreenPos){0, 0}}};
-  Grid grid = GridCreate();
-  Pieces pieces = PiecesCreate();
-
-  if (pieces_at_bottom) {
-#if defined(PLATFORM_ANDROID)
-    ScreenPos pieces_and_grid = GridToScreen(
-        (GridPos){cols, num_pieces / pieces_per_grid_length * piece_length + (rows)}, origin);
-    ScreenPos canvas_offset = AddScreenPos(
-        ScaleScreenPos(SubScreenPos((ScreenPos){GetScreenWidth(), GetScreenHeight() - squareLength},
-                                    pieces_and_grid),
-                       0.5),
-        GridToScreen((GridPos){0, 1}, origin));
-    pieces.canvas = (Canvas){AddScreenPos(canvas_offset, GridToScreen((GridPos){0, rows}, origin))};
-    grid.canvas = (Canvas){canvas_offset};
-#else
-    pieces.canvas = (Canvas){0, GridToCanvas((GridPos){0, rows + 1}).y};
-    grid.canvas = (Canvas){GridToScreen((GridPos){0, 1}, origin)};
-#endif
-  } else {
-    pieces.canvas = (Canvas){GridToScreen((GridPos){cols, 1}, origin)};
-    grid.canvas = (Canvas){GridToScreen((GridPos){0, 1}, origin)};
-  }
+  PositionCanvases(&grid, &pieces, &score);
   bool stop = false;
   GridInit(&grid);
   BuildPieces(&grid, &pieces);
