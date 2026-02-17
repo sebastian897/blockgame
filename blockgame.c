@@ -50,7 +50,6 @@ void random_pal_idx(uint8_t pal_idxs[ARRAY_LENGTH(palette) - 1], int n) {
   for (int i = 0; i != n; i++) {
     int j = i + rand() % (total - i);
 
-    // swap colors[i] and colors[j]
     uint8_t temp = pal_idxs[i];
     pal_idxs[i] = pal_idxs[j];
     pal_idxs[j] = temp;
@@ -58,7 +57,6 @@ void random_pal_idx(uint8_t pal_idxs[ARRAY_LENGTH(palette) - 1], int n) {
 }
 
 typedef bool* Shape;
-// typedef bool Shape[piece_length][piece_length];
 
 typedef struct ScreenPos {
   int x;
@@ -70,7 +68,6 @@ typedef struct Canvas {
 } Canvas;
 
 typedef struct Grid {
-  // uint8_t arr[cols][rows];
   uint8_t* arr;
   Canvas canvas;
 } Grid;
@@ -97,7 +94,6 @@ typedef struct Piece {
 } Piece;
 
 typedef struct Pieces {
-  // Piece arr[num_pieces];
   Piece* arr;
   Canvas canvas;
 } Pieces;
@@ -270,10 +266,8 @@ void GetFullRows(const Grid* grid, bool* full_rows) {
 }
 
 void ClearSquares(Grid* grid) {
-  // bool full_cols[cols] = {0};
   bool* full_cols = calloc(cols, sizeof(*full_cols));
   GetFullCols(grid, full_cols);
-  // bool full_rows[rows] = {0};
   bool* full_rows = calloc(rows, sizeof(*full_rows));
   GetFullRows(grid, full_rows);
   for (int col = 0; col != cols; col++) {
@@ -314,6 +308,7 @@ Pieces PiecesCopy(const Pieces* src) {
 
 Grid GridCreate() {
   Grid grid;
+  grid.canvas = (Canvas){{0, 0}};
   grid.arr = malloc(cols * rows * sizeof(*grid.arr));
   return grid;
 }
@@ -630,13 +625,11 @@ int main(void) {
   int y = GetMonitorHeight(GetCurrentMonitor()) * (1 - windowSize) / 2;
   SetWindowPosition(x, y);
 #endif
-  // ToggleFullscreen();
   ReCalc();
   SetTargetFPS(60);
 
   Grid grid = GridCreate();
   Pieces pieces = PiecesCreate();
-  grid.canvas = (Canvas){{0, 0}};
 
   if (pieces_at_bottom) {
 #if defined(PLATFORM_ANDROID)
