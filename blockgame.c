@@ -1,4 +1,3 @@
-#include "raylib.h"
 #include <limits.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -6,6 +5,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+
+#include "raylib.h"
 
 #define CEIL_DIV(x, y) (((x) + (y) - 1) / (y))
 #define ARRAY_LENGTH(x) (sizeof(x) / sizeof((x)[0]))
@@ -39,15 +40,13 @@ const float piece_scale_factor = 0.8;
 #define MAX_A 255
 bool debug = true;
 #define EMPTY (Color){30, 30, 30, 255}
-Color palette[] = {EMPTY,      MAROON,    ORANGE, DARKGREEN, DARKBLUE,
-                   DARKPURPLE, DARKBROWN, RED,    GOLD,      LIME,
-                   BLUE,       VIOLET,    BROWN,  PINK,      YELLOW,
-                   GREEN,      SKYBLUE,   PURPLE, BEIGE};
+Color palette[] = {EMPTY,  MAROON, ORANGE,  DARKGREEN, DARKBLUE, DARKPURPLE, DARKBROWN,
+                   RED,    GOLD,   LIME,    BLUE,      VIOLET,   BROWN,      PINK,
+                   YELLOW, GREEN,  SKYBLUE, PURPLE,    BEIGE};
 
 void random_pal_idx(uint8_t pal_idxs[ARRAY_LENGTH(palette) - 1], int n) {
   int total = ARRAY_LENGTH(palette) - 1;
-  for (int i = 0; i != total; i++)
-    pal_idxs[i] = i + 1;
+  for (int i = 0; i != total; i++) pal_idxs[i] = i + 1;
   for (int i = 0; i != n; i++) {
     int j = i + rand() % (total - i);
 
@@ -58,7 +57,7 @@ void random_pal_idx(uint8_t pal_idxs[ARRAY_LENGTH(palette) - 1], int n) {
   }
 }
 
-typedef bool *Shape;
+typedef bool* Shape;
 // typedef bool Shape[piece_length][piece_length];
 
 typedef struct ScreenPos {
@@ -72,7 +71,7 @@ typedef struct Canvas {
 
 typedef struct Grid {
   // uint8_t arr[cols][rows];
-  uint8_t *arr;
+  uint8_t* arr;
   Canvas canvas;
 } Grid;
 
@@ -99,7 +98,7 @@ typedef struct Piece {
 
 typedef struct Pieces {
   // Piece arr[num_pieces];
-  Piece *arr;
+  Piece* arr;
   Canvas canvas;
 } Pieces;
 
@@ -132,13 +131,11 @@ ScreenPos GridToScreen(GridPos gp, Canvas c) {
 }
 
 Rectangle ScreenToRectangle(ScreenPos sp) {
-  return (Rectangle){sp.x, sp.y, squareLength * squareAmount,
-                     squareLength * squareAmount};
+  return (Rectangle){sp.x, sp.y, squareLength * squareAmount, squareLength * squareAmount};
 }
 
 GridPos CanvasToGrid(CanvasPos cp) {
-  if (cp.x < 0 || cp.y < 0)
-    return (GridPos){-1, -1}; // ensure negatives dont get displayes
+  if (cp.x < 0 || cp.y < 0) return (GridPos){-1, -1};  // ensure negatives dont get displayes
   return (GridPos){cp.x / squareLength, cp.y / squareLength};
 }
 
@@ -168,7 +165,6 @@ void SwapGrid(int width, int height) {
 }
 
 void ReCalc(void) {
-
 #if defined(PLATFORM_ANDROID)
   const int screenWidth = GetScreenWidth();
   const int screenHeight = GetScreenHeight();
@@ -200,19 +196,18 @@ void ReCalc(void) {
 }
 
 bool MouseCollisionDetected(ScreenPos mouse, ScreenPos objpos, Size size) {
-  if (mouse.x > objpos.x && mouse.x < objpos.x + size.width &&
-      mouse.y > objpos.y && mouse.y < objpos.y + size.height)
+  if (mouse.x > objpos.x && mouse.x < objpos.x + size.width && mouse.y > objpos.y &&
+      mouse.y < objpos.y + size.height)
     return true;
   return false;
 }
 
 bool DoesCoordFit(int coord, int bound, int size) {
-  if (coord < 0 || coord > bound - size)
-    return false;
+  if (coord < 0 || coord > bound - size) return false;
   return true;
 }
 
-Size GetPieceSize(const Piece *piece) {
+Size GetPieceSize(const Piece* piece) {
   Size size = {0, 0};
   for (int col = 0; col != piece_length; col++) {
     for (int row = 0; row != piece_length; row++) {
@@ -229,28 +224,24 @@ Size GetPieceSize(const Piece *piece) {
   return size;
 }
 
-bool IsSpaceOccupied(const Piece *piece, GridPos gpos, Grid *grid) {
+bool IsSpaceOccupied(const Piece* piece, GridPos gpos, Grid* grid) {
   for (int col = 0; col != piece_length; col++) {
     for (int row = 0; row != piece_length; row++) {
-      if (!piece->shape[PIECE_IDX(col, row)])
-        continue;
+      if (!piece->shape[PIECE_IDX(col, row)]) continue;
       GridPos rec_pos = AddGridPos(gpos, (GridPos){col, row});
-      if (grid->arr[GRID_IDX(rec_pos.x, rec_pos.y)]) {
-        return false;
-      }
+      if (grid->arr[GRID_IDX(rec_pos.x, rec_pos.y)]) return false;
     }
   }
   return true;
 }
 
-bool DoesPieceFit(const Piece *piece, GridPos gpos, Grid *grid) {
+bool DoesPieceFit(const Piece* piece, GridPos gpos, Grid* grid) {
   Size size = GetPieceSize(piece);
-  return DoesCoordFit(gpos.x, cols, size.width) &&
-         DoesCoordFit(gpos.y, rows, size.height) &&
+  return DoesCoordFit(gpos.x, cols, size.width) && DoesCoordFit(gpos.y, rows, size.height) &&
          IsSpaceOccupied(piece, gpos, grid);
 }
 
-void GetFullCols(const Grid *grid, bool *full_cols) {
+void GetFullCols(const Grid* grid, bool* full_cols) {
   for (int col = 0; col != cols; col++) {
     int colCount = 0;
     for (int row = 0; row != rows; row++) {
@@ -264,7 +255,7 @@ void GetFullCols(const Grid *grid, bool *full_cols) {
   }
 }
 
-void GetFullRows(const Grid *grid, bool *full_rows) {
+void GetFullRows(const Grid* grid, bool* full_rows) {
   for (int row = 0; row != rows; row++) {
     int rowCount = 0;
     for (int col = 0; col != cols; col++) {
@@ -278,12 +269,12 @@ void GetFullRows(const Grid *grid, bool *full_rows) {
   }
 }
 
-void ClearSquares(Grid *grid) {
+void ClearSquares(Grid* grid) {
   // bool full_cols[cols] = {0};
-  bool *full_cols = calloc(cols, sizeof(*full_cols));
+  bool* full_cols = calloc(cols, sizeof(*full_cols));
   GetFullCols(grid, full_cols);
   // bool full_rows[rows] = {0};
-  bool *full_rows = calloc(rows, sizeof(*full_rows));
+  bool* full_rows = calloc(rows, sizeof(*full_rows));
   GetFullRows(grid, full_rows);
   for (int col = 0; col != cols; col++) {
     for (int row = 0; row != rows; row++) {
@@ -297,20 +288,20 @@ void ClearSquares(Grid *grid) {
 }
 
 Grid GridCopy(Grid grid) {
-  uint8_t *new_arr = malloc(cols * rows * sizeof(*grid.arr));
+  uint8_t* new_arr = malloc(cols * rows * sizeof(*grid.arr));
   memcpy(new_arr, grid.arr, cols * rows * sizeof(*grid.arr));
   grid.arr = new_arr;
   return grid;
 }
 
-Pieces PiecesCopy(const Pieces *src) {
+Pieces PiecesCopy(const Pieces* src) {
   Pieces dst = *src;
 
   size_t pieces_size = num_pieces * sizeof(src->arr[0]);
   size_t shapes_size = num_pieces * piece_length * piece_length * sizeof(*src->arr[0].shape);
   size_t total = pieces_size + shapes_size;
 
-  void *block = malloc(total);
+  void* block = malloc(total);
   if (!block) {
     perror("malloc");
     exit(1);
@@ -327,7 +318,7 @@ Grid GridCreate() {
   return grid;
 }
 
-void GridDestroy(Grid *grid) {
+void GridDestroy(Grid* grid) {
   if (grid->arr != NULL) {
     free(grid->arr);
   }
@@ -340,14 +331,14 @@ Pieces PiecesCreate(void) {
   size_t total = pieces_size + shapes_size;
 
   // one big allocation
-  void *block = malloc(total);
+  void* block = malloc(total);
   if (!block) {
     fprintf(stderr, "malloc failed\n");
     exit(1);
   }
 
   p.arr = block;
-  bool *shape_pool = (bool *)((char *)block + pieces_size);
+  bool* shape_pool = (bool*)((char*)block + pieces_size);
 
   for (int i = 0; i < num_pieces; i++) {
     p.arr[i].shape = shape_pool + i * piece_length * piece_length;
@@ -355,26 +346,23 @@ Pieces PiecesCreate(void) {
   return p;
 }
 
-void PiecesDestroy(Pieces *p) {
+void PiecesDestroy(Pieces* p) {
   free(p->arr);
   p->arr = NULL;
 }
 
-bool DropPiece(Piece *piece, GridPos gpos, Grid *grid);
+bool DropPiece(Piece* piece, GridPos gpos, Grid* grid);
 
-bool IsPiecesEmpty(const Pieces *pieces);
+bool IsPiecesEmpty(const Pieces* pieces);
 
-bool DoPiecesFitRecurse(Grid *grid_ptr, Pieces *pieces_ptr, int rem_levels) {
-  if (IsPiecesEmpty(pieces_ptr) || rem_levels == 0)
-    return true;
+bool DoPiecesFitRecurse(Grid* grid_ptr, Pieces* pieces_ptr, int rem_levels) {
+  if (IsPiecesEmpty(pieces_ptr) || rem_levels == 0) return true;
   for (int p_idx = 0; p_idx != num_pieces; p_idx++) {
-    if (pieces_ptr->arr[p_idx].pal_idx == 0)
-      continue;
+    if (pieces_ptr->arr[p_idx].pal_idx == 0) continue;
     for (int col = 0; col != cols; col++) {
       for (int row = 0; row != rows; row++) {
         GridPos gpos = {col, row};
-        if (!DoesPieceFit(&pieces_ptr->arr[p_idx], gpos, grid_ptr))
-          continue;
+        if (!DoesPieceFit(&pieces_ptr->arr[p_idx], gpos, grid_ptr)) continue;
         Grid grid = GridCopy(*grid_ptr);
         Pieces pieces = PiecesCopy(pieces_ptr);
         if (!DropPiece(&pieces.arr[p_idx], gpos, &grid)) {
@@ -387,15 +375,14 @@ bool DoPiecesFitRecurse(Grid *grid_ptr, Pieces *pieces_ptr, int rem_levels) {
         bool success = DoPiecesFitRecurse(&grid, &pieces, rem_levels - 1);
         PiecesDestroy(&pieces);
         GridDestroy(&grid);
-        if (success)
-          return true;
+        if (success) return true;
       }
     }
   }
   return false;
 }
 
-bool DoPiecesFit(Grid *grid_ptr, Pieces *pieces_ptr, int rem_levels) {
+bool DoPiecesFit(Grid* grid_ptr, Pieces* pieces_ptr, int rem_levels) {
   Grid grid = GridCopy(*grid_ptr);
   Pieces pieces = PiecesCopy(pieces_ptr);
 
@@ -406,21 +393,18 @@ bool DoPiecesFit(Grid *grid_ptr, Pieces *pieces_ptr, int rem_levels) {
   return retval;
 }
 
-void CanPlacePiece(Pieces *pieces, Grid *grid, gamestate *gstate) {
-  if (!DoPiecesFit(grid, pieces, 1))
-    *gstate = game_over; // only 1 level of look ahead
+void CanPlacePiece(Pieces* pieces, Grid* grid, gamestate* gstate) {
+  if (!DoPiecesFit(grid, pieces, 1)) *gstate = game_over;  // only 1 level of look ahead
 }
 
 bool IsTopRowEmpty(Shape shape) {
   for (int col = 0; col != piece_length; col++)
-    if (shape[PIECE_IDX(col, 0)])
-      return false;
+    if (shape[PIECE_IDX(col, 0)]) return false;
   return true;
 }
 bool IsLeftColEmpty(Shape shape) {
   for (int row = 0; row != piece_length; row++)
-    if (shape[PIECE_IDX(0, row)])
-      return false;
+    if (shape[PIECE_IDX(0, row)]) return false;
   return true;
 }
 
@@ -446,7 +430,7 @@ void RemoveLeftCol(Shape shape) {
   }
 }
 
-void BuildPiece(Piece *piece, int prob) {
+void BuildPiece(Piece* piece, int prob) {
   bool is_empty;
   do {
     is_empty = true;
@@ -454,8 +438,7 @@ void BuildPiece(Piece *piece, int prob) {
       for (int row = 0; row < piece_length; row++) {
         int rnd = rand() % 100;
         bool b = rnd < prob;
-        if (b)
-          is_empty = false;
+        if (b) is_empty = false;
         piece->shape[PIECE_IDX(col, row)] = b;
       }
     }
@@ -472,67 +455,60 @@ void BuildPiece(Piece *piece, int prob) {
 
 CanvasPos GetPieceHomePos(int piece_idx) {
   if (pieces_at_bottom) {
-    return GridToCanvas(
-        (GridPos){(piece_idx % pieces_per_grid_length) * piece_length,
-                  (piece_idx / pieces_per_grid_length * piece_length)});
+    return GridToCanvas((GridPos){(piece_idx % pieces_per_grid_length) * piece_length,
+                                  (piece_idx / pieces_per_grid_length * piece_length)});
   } else
-    return GridToCanvas(
-        (GridPos){(piece_idx / pieces_per_grid_length * piece_length),
-                  (piece_idx % pieces_per_grid_length) * piece_length});
+    return GridToCanvas((GridPos){(piece_idx / pieces_per_grid_length * piece_length),
+                                  (piece_idx % pieces_per_grid_length) * piece_length});
 }
 
-GridPos GetShadowPos(ScreenPos spos, Grid *grid) {
+GridPos GetShadowPos(ScreenPos spos, Grid* grid) {
   ScreenPos effective_dropping_pos =
-      AddScreenPos(spos, (ScreenPos){squareLength / 2, // draw shadow
+      AddScreenPos(spos, (ScreenPos){squareLength / 2,  // draw shadow
                                      +squareLength / 2});
   return CanvasToGrid(ScreenToCanvas(effective_dropping_pos, grid->canvas));
 }
 
-void BuildPieces(Pieces *pieces, Grid *grid) {
+void BuildPieces(Pieces* pieces, Grid* grid) {
   int attempts = 0;
   int prob = square_probability_max;
   uint8_t pal_idxs[ARRAY_LENGTH(palette) - 1];
   random_pal_idx(pal_idxs, num_pieces);
   while (true) {
     attempts++;
-    if (attempts % 10 == 0 && prob > square_probability_min)
-      prob--;
+    if (attempts % 10 == 0 && prob > square_probability_min) prob--;
     for (int i = 0; i != num_pieces; i++) {
       BuildPiece(&pieces->arr[i], prob);
       pieces->arr[i].pal_idx = pal_idxs[i];
     }
-    if (DoPiecesFit(grid, pieces, INT_MAX))
-      break;
+    if (DoPiecesFit(grid, pieces, INT_MAX)) break;
   }
   printf("attempts = %d\n", attempts);
 }
 
-bool IsPiecesEmpty(const Pieces *pieces) {
+bool IsPiecesEmpty(const Pieces* pieces) {
   for (int i = 0; i != num_pieces; i++) {
-    if (pieces->arr[i].pal_idx != 0)
-      return false;
+    if (pieces->arr[i].pal_idx != 0) return false;
   }
   return true;
 }
 
-void RefillPieces(Pieces *pieces, Grid *grid) {
-  if (IsPiecesEmpty(pieces))
-    BuildPieces(pieces, grid);
+void RefillPieces(Pieces* pieces, Grid* grid) {
+  if (IsPiecesEmpty(pieces)) BuildPieces(pieces, grid);
 }
 
-void GridInit(Grid *grid) {
+void GridInit(Grid* grid) {
   for (int col = 0; col != cols; col++) {
     for (int row = 0; row != rows; row++) {
-      grid->arr[GRID_IDX(col, row)] = 0; // empty index = 0
+      grid->arr[GRID_IDX(col, row)] = 0;  // empty index = 0
     }
   }
 }
 
-bool DropPiece(Piece *piece, GridPos gpos, Grid *grid) {
+bool DropPiece(Piece* piece, GridPos gpos, Grid* grid) {
   for (int col = 0; col != piece_length; col++) {
     for (int row = 0; row != piece_length; row++) {
-      if (!piece->shape[PIECE_IDX(col, row)])
-        continue;
+      if (!piece->shape[PIECE_IDX(col, row)]) continue;
       GridPos rec_pos = AddGridPos(gpos, (GridPos){col, row});
       grid->arr[GRID_IDX(rec_pos.x, rec_pos.y)] = piece->pal_idx;
     }
@@ -540,11 +516,11 @@ bool DropPiece(Piece *piece, GridPos gpos, Grid *grid) {
   piece->pal_idx = 0;
   return true;
 }
-void RenderGrid(Grid *grid) {
+void RenderGrid(Grid* grid) {
   for (int col = 0; col != cols; col++) {
     for (int row = 0; row != rows; row++) {
-      Rectangle rec = ScreenToRectangle(
-          CanvasToScreen(GridToCanvas((GridPos){col, row}), grid->canvas));
+      Rectangle rec =
+          ScreenToRectangle(CanvasToScreen(GridToCanvas((GridPos){col, row}), grid->canvas));
       Color c;
       c = palette[grid->arr[GRID_IDX(col, row)]];
       DrawRectangleRec(rec, c);
@@ -554,24 +530,21 @@ void RenderGrid(Grid *grid) {
 
 Rectangle ScaleRectangle(Rectangle rect, ScreenPos centre, float scale_factor) {
   return (Rectangle){centre.x - scale_factor * (centre.x - rect.x),
-                     centre.y - scale_factor * (centre.y - rect.y),
-                     rect.width * scale_factor, rect.height * scale_factor};
+                     centre.y - scale_factor * (centre.y - rect.y), rect.width * scale_factor,
+                     rect.height * scale_factor};
 }
 
 ScreenPos GetPieceCentre(ScreenPos piece_top_left) {
-  return AddScreenPos(piece_top_left,
-                      (ScreenPos){squareLength * piece_length / 2,
-                                  squareLength * piece_length / 2});
+  return AddScreenPos(piece_top_left, (ScreenPos){squareLength * piece_length / 2,
+                                                  squareLength * piece_length / 2});
 }
 
-void DrawPiece(const Piece *piece, ScreenPos piece_pos, int a,
-               float scale_factor) {
+void DrawPiece(const Piece* piece, ScreenPos piece_pos, int a, float scale_factor) {
   Canvas mc = {(ScreenPos){0, 0}};
   for (int col = 0; col != piece_length; col++) {
     for (int row = 0; row != piece_length; row++) {
       if (piece->shape[PIECE_IDX(col, row)]) {
-        ScreenPos rec_pos =
-            AddScreenPos(piece_pos, GridToScreen((GridPos){col, row}, mc));
+        ScreenPos rec_pos = AddScreenPos(piece_pos, GridToScreen((GridPos){col, row}, mc));
         Rectangle unscaled_rect = ScreenToRectangle(rec_pos);
         ScreenPos centrepos = GetPieceCentre(piece_pos);
         Rectangle rec = ScaleRectangle(unscaled_rect, centrepos, scale_factor);
@@ -583,7 +556,7 @@ void DrawPiece(const Piece *piece, ScreenPos piece_pos, int a,
   }
 }
 
-ScreenPos GetDraggingPiecePos(const Pieces *pieces, int drag_idx) {
+ScreenPos GetDraggingPiecePos(const Pieces* pieces, int drag_idx) {
 #if defined(PLATFORM_ANDROID)
   float sf = 2;
 #else
@@ -592,17 +565,15 @@ ScreenPos GetDraggingPiecePos(const Pieces *pieces, int drag_idx) {
   ScreenPos mousePos = {GetMouseX(), GetMouseY()};
   return AddScreenPos(
       CanvasToScreen(GetPieceHomePos(drag_idx), pieces->canvas),
-      ScaleScreenPos(SubScreenPos(mousePos, pieces->arr[drag_idx].drag.origin),
-                     sf));
+      ScaleScreenPos(SubScreenPos(mousePos, pieces->arr[drag_idx].drag.origin), sf));
 }
 
-void DrawPieces(Pieces *pieces, Grid *grid) {
+void DrawPieces(Pieces* pieces, Grid* grid) {
   int drag_idx = -1;
   for (int i = 0; i != num_pieces; i++) {
-    if (pieces->arr[i].pal_idx == 0)
-      continue;
+    if (pieces->arr[i].pal_idx == 0) continue;
     if (pieces->arr[i].drag.dragging) {
-      drag_idx = i; // save idx of drag pieces for later drawing
+      drag_idx = i;  // save idx of drag pieces for later drawing
     } else {
       ScreenPos s = CanvasToScreen(GetPieceHomePos(i), pieces->canvas);
       DrawPiece(&pieces->arr[i], s, MAX_A, piece_scale_factor);
@@ -612,25 +583,21 @@ void DrawPieces(Pieces *pieces, Grid *grid) {
     ScreenPos piece_pos = GetDraggingPiecePos(pieces, drag_idx);
     GridPos gpos = GetShadowPos(piece_pos, grid);
     if (DoesPieceFit(&pieces->arr[drag_idx], gpos, grid)) {
-      DrawPiece(&pieces->arr[drag_idx], GridToScreen(gpos, grid->canvas),
-                transparency, 1);
+      DrawPiece(&pieces->arr[drag_idx], GridToScreen(gpos, grid->canvas), transparency, 1);
     }
 
     DrawPiece(&pieces->arr[drag_idx], piece_pos, MAX_A, 1);
   }
 }
 
-void OnMouseClick(Pieces *pieces) {
-  if (!IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
-    return;
+void OnMouseClick(Pieces* pieces) {
+  if (!IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) return;
   ScreenPos mousePos = {GetMouseX(), GetMouseY()};
   for (int i = 0; i != num_pieces; i++) {
-    if (pieces->arr[i].pal_idx == 0)
-      continue;
+    if (pieces->arr[i].pal_idx == 0) continue;
     ScreenPos p_origin = CanvasToScreen(GetPieceHomePos(i), pieces->canvas);
-    if (MouseCollisionDetected(
-            mousePos, p_origin,
-            (Size){piece_length * squareLength, piece_length * squareLength})) {
+    if (MouseCollisionDetected(mousePos, p_origin,
+                               (Size){piece_length * squareLength, piece_length * squareLength})) {
       pieces->arr[i].drag.dragging = true;
       pieces->arr[i].drag.origin = mousePos;
       return;
@@ -638,10 +605,9 @@ void OnMouseClick(Pieces *pieces) {
   }
 }
 
-void OnMouseRelease(Pieces *pieces, Grid *grid) {
+void OnMouseRelease(Pieces* pieces, Grid* grid) {
   for (int p_idx = 0; p_idx != num_pieces; p_idx++) {
-    if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON) &&
-        pieces->arr[p_idx].drag.dragging) {
+    if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON) && pieces->arr[p_idx].drag.dragging) {
       if (pieces->arr[p_idx].drag.dragging) {
         ScreenPos piece_pos = GetDraggingPiecePos(pieces, p_idx);
         GridPos gpos = GetShadowPos(piece_pos, grid);
@@ -679,15 +645,12 @@ int main(void) {
     ScreenPos canvas_offset = ScaleScreenPos(
         SubScreenPos(
             (ScreenPos){GetScreenWidth(), GetScreenHeight()},
-            GridToScreen((GridPos){cols, num_pieces / pieces_per_grid_length *
-                                                 piece_length +
-                                             rows},
+            GridToScreen((GridPos){cols, num_pieces / pieces_per_grid_length * piece_length + rows},
                          origin)),
         0.5);
 
     grid.canvas = (Canvas){canvas_offset};
-    pieces.canvas = (Canvas){
-        AddScreenPos(canvas_offset, GridToScreen((GridPos){0, rows}, origin))};
+    pieces.canvas = (Canvas){AddScreenPos(canvas_offset, GridToScreen((GridPos){0, rows}, origin))};
 #else
     pieces.canvas = (Canvas){0, GridToCanvas((GridPos){0, rows}).y};
 #endif
@@ -700,33 +663,31 @@ int main(void) {
   int fade = 0;
   while (!WindowShouldClose() && !stop) {
     switch (gstate) {
-    case playing:
-      OnMouseClick(&pieces);
-      OnMouseRelease(&pieces, &grid);
-      ClearSquares(&grid);
-      RefillPieces(&pieces, &grid);
-      CanPlacePiece(&pieces, &grid, &gstate);
+      case playing:
+        OnMouseClick(&pieces);
+        OnMouseRelease(&pieces, &grid);
+        ClearSquares(&grid);
+        RefillPieces(&pieces, &grid);
+        CanPlacePiece(&pieces, &grid, &gstate);
 
-      BeginDrawing();
-      ClearBackground((Color){46, 46, 46, 255});
-      RenderGrid(&grid);
-      DrawPieces(&pieces, &grid);
-      EndDrawing();
-      // stop = true;
-      break;
-    case game_over:
-      BeginDrawing();
-      ClearBackground((Color){46, 46, 46, 255});
-      RenderGrid(&grid);
-      DrawPieces(&pieces, &grid);
-      DrawRectangleRec((Rectangle){0, 0, screen_width, screen_height},
-                       (Color){0, 0, 0, fade});
-      EndDrawing();
-      if (fade < MAX_A - 1)
-        fade += 2;
-      break;
-    default:
-      exit(1);
+        BeginDrawing();
+        ClearBackground((Color){46, 46, 46, 255});
+        RenderGrid(&grid);
+        DrawPieces(&pieces, &grid);
+        EndDrawing();
+        // stop = true;
+        break;
+      case game_over:
+        BeginDrawing();
+        ClearBackground((Color){46, 46, 46, 255});
+        RenderGrid(&grid);
+        DrawPieces(&pieces, &grid);
+        DrawRectangleRec((Rectangle){0, 0, screen_width, screen_height}, (Color){0, 0, 0, fade});
+        EndDrawing();
+        if (fade < MAX_A - 1) fade += 2;
+        break;
+      default:
+        exit(1);
     }
   }
   CloseWindow();
