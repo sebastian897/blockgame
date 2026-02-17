@@ -316,16 +316,20 @@ Pieces PiecesCopy(Pieces pieces) {
   return pieces;
 }
 
-void AllocGrid(Grid *grid) {
-  grid->arr = malloc(cols * rows * sizeof(*grid->arr));
+Grid GridCreate() {
+  Grid grid;
+  grid.arr = malloc(cols * rows * sizeof(*grid.arr));
+  return grid;
 }
 
-void AllocPieces(Pieces *pieces) {
-  pieces->arr = malloc(num_pieces * sizeof(*pieces->arr));
+Pieces PiecesCreate() {
+  Pieces pieces;
+  pieces.arr = malloc(num_pieces * sizeof(*pieces.arr));
   for (int p_idx = 0; p_idx != num_pieces; p_idx++) {
-    pieces->arr[p_idx].shape =
-        malloc(piece_length * piece_length * sizeof(*pieces->arr[p_idx].shape));
+    pieces.arr[p_idx].shape =
+        malloc(piece_length * piece_length * sizeof(*pieces.arr[p_idx].shape));
   }
+  return pieces;
 }
 
 void GridDestroy(Grid *grid) {
@@ -638,7 +642,7 @@ void OnMouseRelease(Pieces *pieces, Grid *grid) {
 }
 
 int main(void) {
-  srand(1);
+  srand(time(NULL));
 #if defined(PLATFORM_ANDROID)
   InitWindow(0, 0, "BlockGame");
 #else
@@ -651,24 +655,21 @@ int main(void) {
   ReCalc();
   SetTargetFPS(60);
 
-  Grid grid;
-  AllocGrid(&grid);
-  Pieces pieces;
-  AllocPieces(&pieces);
+  Grid grid = GridCreate();
+  Pieces pieces = PiecesCreate();
   grid.canvas = (Canvas){{0, 0}};
-  Canvas origin = {0, 0};
 
   if (pieces_at_bottom) {
 #if defined(PLATFORM_ANDROID)
+    Canvas origin = {0, 0};
     printf("GetScreenHeight = %d\n", GetScreenHeight());
     ScreenPos canvas_offset = ScaleScreenPos(
         SubScreenPos(
             (ScreenPos){GetScreenWidth(), GetScreenHeight()},
-            GridToScreen(
-                (GridPos){cols ,
-                          num_pieces / pieces_per_grid_length * piece_length +
-                              rows},
-                origin)),
+            GridToScreen((GridPos){cols, num_pieces / pieces_per_grid_length *
+                                                 piece_length +
+                                             rows},
+                         origin)),
         0.5);
 
     grid.canvas = (Canvas){canvas_offset};
