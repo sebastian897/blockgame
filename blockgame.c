@@ -229,7 +229,7 @@ Size GetPieceSize(const Piece* piece) {
   return size;
 }
 
-bool IsSpaceOccupied(const Piece* piece, GridPos gpos, Grid* grid) {
+bool IsSpaceOccupied(const Piece* piece, GridPos gpos, const Grid* grid) {
   for (int col = 0; col != piece_length; col++) {
     for (int row = 0; row != piece_length; row++) {
       if (!piece->shape[PIECE_IDX(col, row)]) continue;
@@ -240,7 +240,7 @@ bool IsSpaceOccupied(const Piece* piece, GridPos gpos, Grid* grid) {
   return true;
 }
 
-bool DoesPieceFit(const Piece* piece, GridPos gpos, Grid* grid) {
+bool DoesPieceFit(const Piece* piece, GridPos gpos, const Grid* grid) {
   Size size = GetPieceSize(piece);
   return DoesCoordFit(gpos.x, cols, size.width) && DoesCoordFit(gpos.y, rows, size.height) &&
          IsSpaceOccupied(piece, gpos, grid);
@@ -290,11 +290,12 @@ void ClearSquares(Grid* grid) {
   free(full_cols);
 }
 
-Grid GridCopy(Grid grid) {
-  uint8_t* new_arr = malloc(cols * rows * sizeof(*grid.arr));
-  memcpy(new_arr, grid.arr, cols * rows * sizeof(*grid.arr));
-  grid.arr = new_arr;
-  return grid;
+Grid GridCopy(const Grid* src) {
+  Grid dst = *src;
+  uint8_t* new_arr = malloc(cols * rows * sizeof(*src->arr));
+  memcpy(new_arr, src->arr, cols * rows * sizeof(*src->arr));
+  dst.arr = new_arr;
+  return dst;
 }
 
 Pieces PiecesCopy(const Pieces* src) {
@@ -354,11 +355,11 @@ void PiecesDestroy(Pieces* p) {
   p->arr = NULL;
 }
 
-bool DropPiece(Piece* piece, GridPos gpos, Grid* grid);
+void DropPiece(Piece* piece, GridPos gpos, Grid* grid);
 
 bool IsPiecesEmpty(const Pieces* pieces);
 
-bool DoPiecesFitRecurse(Grid* grid_ptr, Pieces* pieces_ptr, int rem_levels) {
+bool DoPiecesFitRecurse(const Grid* grid_ptr, const Pieces* pieces_ptr, int rem_levels) {
   if (IsPiecesEmpty(pieces_ptr) || rem_levels == 0) return true;
   for (int p_idx = 0; p_idx != num_pieces; p_idx++) {
     if (pieces_ptr->arr[p_idx].pal_idx == 0) continue;
@@ -366,16 +367,13 @@ bool DoPiecesFitRecurse(Grid* grid_ptr, Pieces* pieces_ptr, int rem_levels) {
       for (int row = 0; row != rows; row++) {
         GridPos gpos = {col, row};
         if (!DoesPieceFit(&pieces_ptr->arr[p_idx], gpos, grid_ptr)) continue;
-        Grid grid = GridCopy(*grid_ptr);
+        Grid grid = GridCopy(grid_ptr);
         Pieces pieces = PiecesCopy(pieces_ptr);
-        if (!DropPiece(&pieces.arr[p_idx], gpos, &grid)) {
-          PiecesDestroy(&pieces);
-          GridDestroy(&grid);
-          continue;
-        }
-        pieces.arr[p_idx].pal_idx = 0;
+
+        DropPiece(&pieces.arr[p_idx], gpos, &grid);
         ClearSquares(&grid);
         bool success = DoPiecesFitRecurse(&grid, &pieces, rem_levels - 1);
+
         PiecesDestroy(&pieces);
         GridDestroy(&grid);
         if (success) return true;
@@ -385,8 +383,8 @@ bool DoPiecesFitRecurse(Grid* grid_ptr, Pieces* pieces_ptr, int rem_levels) {
   return false;
 }
 
-bool DoPiecesFit(Grid* grid_ptr, Pieces* pieces_ptr, int rem_levels) {
-  Grid grid = GridCopy(*grid_ptr);
+bool DoPiecesFit(const Grid* grid_ptr, const Pieces* pieces_ptr, int rem_levels) {
+  Grid grid = GridCopy(grid_ptr);
   Pieces pieces = PiecesCopy(pieces_ptr);
 
   bool retval = DoPiecesFitRecurse(&grid, &pieces, rem_levels);
@@ -508,7 +506,7 @@ void GridInit(Grid* grid) {
   }
 }
 
-bool DropPiece(Piece* piece, GridPos gpos, Grid* grid) {
+void DropPiece(Piece* piece, GridPos gpos, Grid* grid) {
   for (int col = 0; col != piece_length; col++) {
     for (int row = 0; row != piece_length; row++) {
       if (!piece->shape[PIECE_IDX(col, row)]) continue;
@@ -517,8 +515,8 @@ bool DropPiece(Piece* piece, GridPos gpos, Grid* grid) {
     }
   }
   piece->pal_idx = 0;
-  return true;
 }
+
 void RenderGrid(Grid* grid) {
   for (int col = 0; col != cols; col++) {
     for (int row = 0; row != rows; row++) {
@@ -645,8 +643,9 @@ int main(void) {
     ScreenPos pieces_and_grid = GridToScreen(
         (GridPos){cols, num_pieces / pieces_per_grid_length * piece_length + (rows)}, origin);
     ScreenPos canvas_offset = AddScreenPos(
-        ScaleScreenPos(
-            SubScreenPos((ScreenPos){GetScreenWidth(), GetScreenHeight()-squareLength}, pieces_and_grid), 0.5),
+        ScaleScreenPos(SubScreenPos((ScreenPos){GetScreenWidth(), GetScreenHeight() - squareLength},
+                                    pieces_and_grid),
+                       0.5),
         GridToScreen((GridPos){0, 1}, origin));
     pieces.canvas = (Canvas){AddScreenPos(canvas_offset, GridToScreen((GridPos){0, rows}, origin))};
     grid.canvas = (Canvas){canvas_offset};
