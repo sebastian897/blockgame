@@ -483,11 +483,11 @@ Pieces PiecesCopy(const Pieces* src) {
   return dst;
 }
 
-void DropPiece(Grid* grid, Piece* piece, GridPos gpos);
+int DropPiece(Grid* grid, Piece* piece, GridPos gpos);
 
 bool IsPiecesEmpty(const Pieces* pieces);
 
-bool DoPiecesFitRecurse(const Grid* grid_ptr, const Pieces* pieces_ptr, int rem_levels) {
+bool DoPiecesFit(const Grid* grid_ptr, const Pieces* pieces_ptr, int rem_levels) {
   if (IsPiecesEmpty(pieces_ptr) || rem_levels == 0) return true;
   for (int p_idx = 0; p_idx != num_pieces; p_idx++) {
     if (pieces_ptr->arr[p_idx].pal_idx == 0) continue;
@@ -499,8 +499,7 @@ bool DoPiecesFitRecurse(const Grid* grid_ptr, const Pieces* pieces_ptr, int rem_
         Pieces pieces = PiecesCopy(pieces_ptr);
 
         DropPiece(&grid, &pieces.arr[p_idx], gpos);
-        ClearSquares(&grid);
-        bool success = DoPiecesFitRecurse(&grid, &pieces, rem_levels - 1);
+        bool success = DoPiecesFit(&grid, &pieces, rem_levels - 1);
 
         PiecesDestroy(&pieces);
         GridDestroy(&grid);
@@ -509,17 +508,6 @@ bool DoPiecesFitRecurse(const Grid* grid_ptr, const Pieces* pieces_ptr, int rem_
     }
   }
   return false;
-}
-
-bool DoPiecesFit(const Grid* grid_ptr, const Pieces* pieces_ptr, int rem_levels) {
-  Grid grid = GridCopy(grid_ptr);
-  Pieces pieces = PiecesCopy(pieces_ptr);
-
-  bool retval = DoPiecesFitRecurse(&grid, &pieces, rem_levels);
-
-  PiecesDestroy(&pieces);
-  GridDestroy(&grid);
-  return retval;
 }
 
 void CanPlacePiece(Grid* grid, Pieces* pieces, gamestate* gstate) {
@@ -636,7 +624,7 @@ void GridInit(Grid* grid) {
   }
 }
 
-void DropPiece(Grid* grid, Piece* piece, GridPos gpos) {
+int DropPiece(Grid* grid, Piece* piece, GridPos gpos) {
   for (int col = 0; col != piece_length; col++) {
     for (int row = 0; row != piece_length; row++) {
       if (!piece->shape[PIECE_IDX(col, row)]) continue;
@@ -645,6 +633,7 @@ void DropPiece(Grid* grid, Piece* piece, GridPos gpos) {
     }
   }
   piece->pal_idx = 0;
+  return ClearSquares(grid);
 }
 
 void RenderGrid(Grid* grid) {
@@ -733,11 +722,11 @@ void DrawScore(Score* score) {
                squareLength * (1 - squareAmount),
            squareLength, LIGHTGRAY);
   Vector2 temp_score_text_size =
-      MeasureTextEx(GetFontDefault(), temp_score_text, squareLength / 2, squareLength / 10.0);
+      MeasureTextEx(GetFontDefault(), temp_score_text, squareLength / 2.0, squareLength / 10.0);
   Vector2 combo_text_size =
-      MeasureTextEx(GetFontDefault(), combo_text, squareLength / 2, squareLength / 10.0);
+      MeasureTextEx(GetFontDefault(), combo_text, squareLength / 2.0, squareLength / 10.0);
   Vector2 combo_lost_text_size =
-      MeasureTextEx(GetFontDefault(), combo_text, squareLength / 2, squareLength / 10.0);
+      MeasureTextEx(GetFontDefault(), combo_text, squareLength / 2.0, squareLength / 10.0);
   if (score->score_text_timer > 0 && score->combo > 1) {
     score->combo_lost_timer = 0;
     DrawText(temp_score_text,
@@ -779,19 +768,22 @@ void OnMouseClick(Pieces* pieces) {
   }
 }
 
-void OnMouseRelease(Grid* grid, Pieces* pieces) {
+bool OnMouseRelease(Grid* grid, Pieces* pieces, int* squares_cleared) {
+  bool dropped = false;
+  if (!IsMouseButtonReleased(MOUSE_LEFT_BUTTON)) return dropped;
   for (int p_idx = 0; p_idx != num_pieces; p_idx++) {
-    if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON) && pieces->arr[p_idx].drag.dragging) {
-      if (pieces->arr[p_idx].drag.dragging) {
-        ScreenPos piece_pos = GetDraggingPiecePos(pieces, p_idx);
-        GridPos gpos = GetShadowPos(piece_pos, grid);
-        if (DoesPieceFit(grid, &pieces->arr[p_idx], gpos))
-          DropPiece(grid, &pieces->arr[p_idx], gpos);
-        pieces->arr[p_idx].drag.dragging = false;
-        return;
+    if (pieces->arr[p_idx].drag.dragging) {
+      ScreenPos piece_pos = GetDraggingPiecePos(pieces, p_idx);
+      GridPos gpos = GetShadowPos(piece_pos, grid);
+      if (DoesPieceFit(grid, &pieces->arr[p_idx], gpos)) {
+        *squares_cleared = DropPiece(grid, &pieces->arr[p_idx], gpos);
+        dropped = true;
       }
+      pieces->arr[p_idx].drag.dragging = false;
+      return dropped;
     }
   }
+  return dropped;
 }
 
 int main(void) {
@@ -821,13 +813,14 @@ int main(void) {
     switch (gstate) {
       case playing:
         OnMouseClick(&pieces);
-        OnMouseRelease(&grid, &pieces);
         UpdateCombo(&score);
-        int squares_cleared = ClearSquares(&grid);
+        int squares_cleared=0;
+        if (OnMouseRelease(&grid, &pieces, &squares_cleared)) {
+          // only check for gameover if sth actually changed
+          CanPlacePiece(&grid, &pieces, &gstate);
+        }
         UpdateScore(&score, squares_cleared);
-
         RefillPieces(&grid, &pieces);
-        CanPlacePiece(&grid, &pieces, &gstate);
 
         BeginDrawing();
         ClearBackground((Color){46, 46, 46, 255});
