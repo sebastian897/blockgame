@@ -14,7 +14,7 @@
 int rows = 9;
 int cols = 9;
 int piece_length = 3;
-int num_pieces = 4;
+int num_pieces = 3;
 int pieces_per_grid_length;
 int screen_width;
 int screen_height;
@@ -27,7 +27,9 @@ enum {
   square_probability_max = 75,
   square_probability_min = 20,
   transparency = 127,
-  phone_bottom_offset = 1
+  phone_bottom_offset = 1,
+  fps = 60,
+  combo_time = fps * 10
 };
 
 typedef enum gamestate { menu, playing, game_over } gamestate;
@@ -87,6 +89,11 @@ typedef struct Grid {
 typedef struct Score {
   int val;
   Canvas canvas;
+  int combo_timer;
+  int combo;
+  int score_text_timer;
+  int temp_score;
+  int combo_lost_timer;
 } Score;
 
 typedef struct CanvasPos {
@@ -241,7 +248,7 @@ void ReCalc(void) {
   const int screenWidth = GetScreenWidth();
   const int screenHeight = GetScreenHeight();
 #else
-  const int screenWidth = GetMonitorWidth(GetCurrentMonitor()) * windowSize / 2;
+  const int screenWidth = GetMonitorWidth(GetCurrentMonitor()) * windowSize;
   const int screenHeight = GetMonitorHeight(GetCurrentMonitor()) * windowSize;
 #endif
   SwapGrid(screenWidth, screenHeight);
@@ -339,6 +346,31 @@ bool DoesPieceFit(const Grid* grid, const Piece* piece, GridPos gpos) {
          IsSpaceFree(grid, piece, gpos);
 }
 
+void IncreaseCombo(Score* score) {
+  if (score->combo_timer > 0) {
+    score->combo += 1;
+  }
+  score->combo_timer = combo_time;
+}
+
+void UpdateCombo(Score* score) {
+  if (score->combo_timer < 0) {
+    if (score->combo > 1) score->combo_lost_timer = fps * 1.5;
+    score->combo = 0;
+    score->combo_timer = combo_time;
+  }
+}
+
+void UpdateScore(Score* score, int squares_cleared) {
+  if (squares_cleared > 0) {
+    IncreaseCombo(score);
+    int val = squares_cleared * score->combo;
+    score->temp_score = val;
+    score->val += val;
+    score->score_text_timer = fps * 1.5;
+  }
+}
+
 void GetFullCols(const Grid* grid, bool* full_cols) {
   for (int col = 0; col != cols; col++) {
     int colCount = 0;
@@ -367,21 +399,23 @@ void GetFullRows(const Grid* grid, bool* full_rows) {
   }
 }
 
-void ClearSquares(Grid* grid, Score* score) {
+int ClearSquares(Grid* grid) {
   bool* full_cols = calloc(cols, sizeof(*full_cols));
   GetFullCols(grid, full_cols);
   bool* full_rows = calloc(rows, sizeof(*full_rows));
   GetFullRows(grid, full_rows);
+  int squares_cleared = 0;
   for (int col = 0; col != cols; col++) {
     for (int row = 0; row != rows; row++) {
       if (full_cols[col] || full_rows[row]) {
         grid->arr[GRID_IDX(col, row)] = 0;
-        if (score) score->val++;
+        squares_cleared++;
       }
     }
   }
   free(full_rows);
   free(full_cols);
+  return squares_cleared;
 }
 
 Grid GridCreate() {
@@ -465,7 +499,7 @@ bool DoPiecesFitRecurse(const Grid* grid_ptr, const Pieces* pieces_ptr, int rem_
         Pieces pieces = PiecesCopy(pieces_ptr);
 
         DropPiece(&grid, &pieces.arr[p_idx], gpos);
-        ClearSquares(&grid, NULL);
+        ClearSquares(&grid);
         bool success = DoPiecesFitRecurse(&grid, &pieces, rem_levels - 1);
 
         PiecesDestroy(&pieces);
@@ -589,7 +623,9 @@ bool IsPiecesEmpty(const Pieces* pieces) {
 }
 
 void RefillPieces(Grid* grid, Pieces* pieces) {
-  if (IsPiecesEmpty(pieces)) BuildPieces(grid, pieces);
+  if (IsPiecesEmpty(pieces)) {
+    BuildPieces(grid, pieces);
+  }
 }
 
 void GridInit(Grid* grid) {
@@ -684,11 +720,47 @@ void DrawPieces(Grid* grid, Pieces* pieces) {
   }
 }
 
-void DrawScore(const Score* score) {
-  const char* text = TextFormat("%d", score->val);
-  Vector2 text_size = MeasureTextEx(GetFontDefault(), text, squareLength, squareLength / 10.0);
-  DrawText(text, score->canvas.origin.x + (score->canvas.size.width - text_size.x) / 2,
-           score->canvas.origin.y + (score->canvas.size.height - text_size.y) / 2 + squareLength * (1 - squareAmount), squareLength, LIGHTGRAY);
+void DrawScore(Score* score) {
+  const char* score_text = TextFormat("%d", score->val);
+  const char* temp_score_text = TextFormat(" +%d", score->temp_score);
+  const char* combo_text = TextFormat(" x%d", score->combo);
+  const char* combo_lost_text = TextFormat("x1");
+
+  Vector2 score_text_size =
+      MeasureTextEx(GetFontDefault(), score_text, squareLength, squareLength / 10.0);
+  DrawText(score_text, score->canvas.origin.x + (score->canvas.size.width - +score_text_size.x) / 2,
+           score->canvas.origin.y + (score->canvas.size.height - score_text_size.y) / 2 +
+               squareLength * (1 - squareAmount),
+           squareLength, LIGHTGRAY);
+  Vector2 temp_score_text_size =
+      MeasureTextEx(GetFontDefault(), temp_score_text, squareLength / 2, squareLength / 10.0);
+  Vector2 combo_text_size =
+      MeasureTextEx(GetFontDefault(), combo_text, squareLength / 2, squareLength / 10.0);
+  Vector2 combo_lost_text_size =
+      MeasureTextEx(GetFontDefault(), combo_text, squareLength / 2, squareLength / 10.0);
+  if (score->score_text_timer > 0 && score->combo > 1) {
+    score->combo_lost_timer = 0;
+    DrawText(temp_score_text,
+             score->canvas.origin.x + (score->canvas.size.width - score_text_size.x) / 2 +
+                 score_text_size.x,
+             score->canvas.origin.y + (score->canvas.size.height - temp_score_text_size.y) / 2 +
+                 squareLength * (1 - squareAmount),
+             squareLength / 2, GREEN);
+    DrawText(combo_text,
+             score->canvas.origin.x + (score->canvas.size.width - score_text_size.x) / 2 +
+                 score_text_size.x + temp_score_text_size.x,
+             score->canvas.origin.y + (score->canvas.size.height - combo_text_size.y) / 2 +
+                 squareLength * (1 - squareAmount),
+             squareLength / 2, MAROON);
+    score->score_text_timer--;
+  } else if (score->combo_lost_timer > 0) {
+    DrawText(combo_lost_text,
+             score->canvas.origin.x + (score->canvas.size.width - score_text_size.x) / 2 +
+                 score_text_size.x + combo_lost_text_size.x,
+             score->canvas.origin.y + (score->canvas.size.height - combo_lost_text_size.y) / 2 +
+                 squareLength * (1 - squareAmount),
+             squareLength / 2, MAROON);    score->combo_lost_timer--;
+  }
 }
 
 void OnMouseClick(Pieces* pieces) {
@@ -723,8 +795,8 @@ void OnMouseRelease(Grid* grid, Pieces* pieces) {
 }
 
 int main(void) {
-  srand(time(NULL));
-  SetTargetFPS(60);
+  srand(1);
+  SetTargetFPS(fps);
   Score score = {0};
   Grid grid = GridCreate();
   Pieces pieces = PiecesCreate();
@@ -744,22 +816,27 @@ int main(void) {
   BuildPieces(&grid, &pieces);
   gamestate gstate = playing;
   int fade = 0;
+  score.combo_timer = combo_time;
   while (!WindowShouldClose() && !stop) {
     switch (gstate) {
       case playing:
         OnMouseClick(&pieces);
         OnMouseRelease(&grid, &pieces);
-        ClearSquares(&grid, &score);
+        UpdateCombo(&score);
+        int squares_cleared = ClearSquares(&grid);
+        UpdateScore(&score, squares_cleared);
+
         RefillPieces(&grid, &pieces);
         CanPlacePiece(&grid, &pieces, &gstate);
 
         BeginDrawing();
         ClearBackground((Color){46, 46, 46, 255});
-        DrawScore(&score);
         RenderGrid(&grid);
         DrawPieces(&grid, &pieces);
+        DrawScore(&score);
         EndDrawing();
         // stop = true;
+        score.combo_timer--;
         break;
       case game_over:
         BeginDrawing();
