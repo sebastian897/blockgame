@@ -63,6 +63,11 @@ typedef struct ScreenPos {
   int y;
 } ScreenPos;
 
+typedef struct Size {
+  int width;
+  int height;
+} Size;
+
 typedef struct Canvas {
   ScreenPos origin;
 } Canvas;
@@ -71,6 +76,11 @@ typedef struct Grid {
   uint8_t* arr;
   Canvas canvas;
 } Grid;
+
+typedef struct Score {
+  int val;
+  Canvas canvas;
+} Score;
 
 typedef struct CanvasPos {
   int x;
@@ -98,10 +108,7 @@ typedef struct Pieces {
   Canvas canvas;
 } Pieces;
 
-typedef struct Size {
-  int width;
-  int height;
-} Size;
+Canvas origin = {(ScreenPos){0, 0}};
 
 ScreenPos ScaleScreenPos(ScreenPos spos, float scale_factor) {
   return (ScreenPos){spos.x * scale_factor, spos.y * scale_factor};
@@ -169,26 +176,28 @@ void ReCalc(void) {
   const int screenHeight = GetMonitorHeight(GetCurrentMonitor()) * windowSize;
 #endif
   SwapGrid(screenWidth, screenHeight);
-  if (screenHeight > screenWidth) {
+  if (screenHeight > screenWidth) {  // rows+1 for score canvas
     pieces_per_grid_length = cols / piece_length;
     int num_piece_rows = CEIL_DIV(num_pieces, pieces_per_grid_length);
-    int maxTall = screenHeight / (rows + num_piece_rows * piece_length);
+    int maxTall = screenHeight / ((rows + 1) + num_piece_rows * piece_length);
     int maxWide = screenWidth / (cols);
     squareLength = (maxTall < maxWide ? maxTall : maxWide);
     screen_width = squareLength * cols;
-    screen_height = squareLength * (rows + num_piece_rows * piece_length);
+    screen_height = squareLength * ((rows + 1) + num_piece_rows * piece_length);
     pieces_at_bottom = true;
   } else {
     pieces_per_grid_length = rows / piece_length;
     int num_piece_cols = CEIL_DIV(num_pieces, pieces_per_grid_length);
-    int maxTall = screenHeight / (rows);
+    int maxTall = screenHeight / (rows + 1);
     int maxWide = screenWidth / (cols + num_piece_cols * piece_length);
     squareLength = (maxTall < maxWide ? maxTall : maxWide);
     screen_width = squareLength * (cols + num_piece_cols * piece_length);
-    screen_height = squareLength * rows;
+    screen_height = squareLength * (rows + 1);
     pieces_at_bottom = false;
   }
+#if defined(PLATFORM_DESKTOP)
   SetWindowSize(screen_width, screen_height);
+#endif
 }
 
 bool MouseCollisionDetected(ScreenPos mouse, ScreenPos objpos, Size size) {
@@ -308,7 +317,6 @@ Pieces PiecesCopy(const Pieces* src) {
 
 Grid GridCreate() {
   Grid grid;
-  grid.canvas = (Canvas){{0, 0}};
   grid.arr = malloc(cols * rows * sizeof(*grid.arr));
   return grid;
 }
@@ -628,27 +636,28 @@ int main(void) {
   ReCalc();
   SetTargetFPS(60);
 
+  Score score = {0, (Canvas){(ScreenPos){0, 0}}};
   Grid grid = GridCreate();
   Pieces pieces = PiecesCreate();
 
   if (pieces_at_bottom) {
 #if defined(PLATFORM_ANDROID)
-    Canvas origin = {0, 0};
-    printf("GetScreenHeight = %d\n", GetScreenHeight());
-    ScreenPos canvas_offset = ScaleScreenPos(
-        SubScreenPos(
-            (ScreenPos){GetScreenWidth(), GetScreenHeight()},
-            GridToScreen((GridPos){cols, num_pieces / pieces_per_grid_length * piece_length + rows},
-                         origin)),
-        0.5);
-
-    grid.canvas = (Canvas){canvas_offset};
+    ScreenPos pieces_and_grid = GridToScreen(
+        (GridPos){cols, num_pieces / pieces_per_grid_length * piece_length + (rows)}, origin);
+    ScreenPos canvas_offset = AddScreenPos(
+        ScaleScreenPos(
+            SubScreenPos((ScreenPos){GetScreenWidth(), GetScreenHeight()-squareLength}, pieces_and_grid), 0.5),
+        GridToScreen((GridPos){0, 1}, origin));
     pieces.canvas = (Canvas){AddScreenPos(canvas_offset, GridToScreen((GridPos){0, rows}, origin))};
+    grid.canvas = (Canvas){canvas_offset};
 #else
-    pieces.canvas = (Canvas){0, GridToCanvas((GridPos){0, rows}).y};
+    pieces.canvas = (Canvas){0, GridToCanvas((GridPos){0, rows + 1}).y};
+    grid.canvas = (Canvas){GridToScreen((GridPos){0, 1}, origin)};
 #endif
-  } else
-    pieces.canvas = (Canvas){{GridToCanvas((GridPos){cols, 0}).x, 0}};
+  } else {
+    pieces.canvas = (Canvas){GridToScreen((GridPos){cols, 1}, origin)};
+    grid.canvas = (Canvas){GridToScreen((GridPos){0, 1}, origin)};
+  }
   bool stop = false;
   GridInit(&grid);
   BuildPieces(&pieces, &grid);
