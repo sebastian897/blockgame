@@ -303,17 +303,22 @@ Grid GridCopy(Grid grid) {
   return grid;
 }
 
-Pieces PiecesCopy(Pieces pieces) {
-  Piece *new_arr = malloc(num_pieces * sizeof(*pieces.arr));
-  memcpy(new_arr, pieces.arr, num_pieces * sizeof(*pieces.arr));
-  for (int p_idx = 0; p_idx != num_pieces; p_idx++) {
-    new_arr[p_idx].shape =
-        malloc(piece_length * piece_length * sizeof(*pieces.arr[p_idx].shape));
-    memcpy(new_arr[p_idx].shape, pieces.arr[p_idx].shape,
-           piece_length * piece_length * sizeof(*pieces.arr[p_idx].shape));
+Pieces PiecesCopy(const Pieces *src) {
+  Pieces dst = *src;
+
+  size_t pieces_size = num_pieces * sizeof(src->arr[0]);
+  size_t shapes_size = num_pieces * piece_length * piece_length * sizeof(*src->arr[0].shape);
+  size_t total = pieces_size + shapes_size;
+
+  void *block = malloc(total);
+  if (!block) {
+    perror("malloc");
+    exit(1);
   }
-  pieces.arr = new_arr;
-  return pieces;
+
+  memcpy(block, src->arr, total);
+  dst.arr = block;
+  return dst;
 }
 
 Grid GridCreate() {
@@ -322,29 +327,37 @@ Grid GridCreate() {
   return grid;
 }
 
-Pieces PiecesCreate() {
-  Pieces pieces;
-  pieces.arr = malloc(num_pieces * sizeof(*pieces.arr));
-  for (int p_idx = 0; p_idx != num_pieces; p_idx++) {
-    pieces.arr[p_idx].shape =
-        malloc(piece_length * piece_length * sizeof(*pieces.arr[p_idx].shape));
-  }
-  return pieces;
-}
-
 void GridDestroy(Grid *grid) {
   if (grid->arr != NULL) {
     free(grid->arr);
   }
 }
 
-void PiecesDestroy(Pieces *pieces) {
-  if (pieces->arr) {
-    for (int p_idx = 0; p_idx != num_pieces; p_idx++) {
-      free(pieces->arr[p_idx].shape);
-    }
-    free(pieces->arr);
+Pieces PiecesCreate(void) {
+  Pieces p = {0};
+  size_t pieces_size = num_pieces * sizeof(p.arr[0]);
+  size_t shapes_size = num_pieces * piece_length * piece_length * sizeof(*p.arr[0].shape);
+  size_t total = pieces_size + shapes_size;
+
+  // one big allocation
+  void *block = malloc(total);
+  if (!block) {
+    fprintf(stderr, "malloc failed\n");
+    exit(1);
   }
+
+  p.arr = block;
+  bool *shape_pool = (bool *)((char *)block + pieces_size);
+
+  for (int i = 0; i < num_pieces; i++) {
+    p.arr[i].shape = shape_pool + i * piece_length * piece_length;
+  }
+  return p;
+}
+
+void PiecesDestroy(Pieces *p) {
+  free(p->arr);
+  p->arr = NULL;
 }
 
 bool DropPiece(Piece *piece, GridPos gpos, Grid *grid);
@@ -363,7 +376,7 @@ bool DoPiecesFitRecurse(Grid *grid_ptr, Pieces *pieces_ptr, int rem_levels) {
         if (!DoesPieceFit(&pieces_ptr->arr[p_idx], gpos, grid_ptr))
           continue;
         Grid grid = GridCopy(*grid_ptr);
-        Pieces pieces = PiecesCopy(*pieces_ptr);
+        Pieces pieces = PiecesCopy(pieces_ptr);
         if (!DropPiece(&pieces.arr[p_idx], gpos, &grid)) {
           PiecesDestroy(&pieces);
           GridDestroy(&grid);
@@ -384,7 +397,7 @@ bool DoPiecesFitRecurse(Grid *grid_ptr, Pieces *pieces_ptr, int rem_levels) {
 
 bool DoPiecesFit(Grid *grid_ptr, Pieces *pieces_ptr, int rem_levels) {
   Grid grid = GridCopy(*grid_ptr);
-  Pieces pieces = PiecesCopy(*pieces_ptr);
+  Pieces pieces = PiecesCopy(pieces_ptr);
 
   bool retval = DoPiecesFitRecurse(&grid, &pieces, rem_levels);
 
