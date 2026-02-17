@@ -119,9 +119,9 @@ Canvas origin = {{0, 0}, {0, 0}, NULL};
 
 void ShiftCanvas(Canvas* head, ScreenPos offest) {
   Canvas* curr = head;
-    while (curr != NULL) {
-      curr->origin.x+= offest.x;
-      curr->origin.y+= offest.y;
+  while (curr != NULL) {
+    curr->origin.x += offest.x;
+    curr->origin.y += offest.y;
     curr = curr->next;
   }
 }
@@ -241,7 +241,7 @@ void ReCalc(void) {
   const int screenWidth = GetScreenWidth();
   const int screenHeight = GetScreenHeight();
 #else
-  const int screenWidth = GetMonitorWidth(GetCurrentMonitor()) * windowSize/2;
+  const int screenWidth = GetMonitorWidth(GetCurrentMonitor()) * windowSize / 2;
   const int screenHeight = GetMonitorHeight(GetCurrentMonitor()) * windowSize;
 #endif
   SwapGrid(screenWidth, screenHeight);
@@ -274,11 +274,16 @@ void PositionCanvases(Grid* grid, Pieces* pieces, Score* score) {
   score->canvas = (Canvas){{0}, GridToPixel((GridSize){cols, 1}), NULL};
   grid->canvas = (Canvas){{0}, GridToPixel((GridSize){cols, rows}), NULL};
   if (pieces_at_bottom) {
-    pieces->canvas =
-        (Canvas){{0},
-                 GridToPixel((GridSize){cols, CEIL_DIV(num_pieces, pieces_per_grid_length) * piece_length}),
-                 NULL};
-    ShiftCanvas(StackAbove(&score->canvas, StackAbove(&grid->canvas, &pieces->canvas)), (ScreenPos){(GetScreenWidth()-grid->canvas.size.width)/2, (GetScreenHeight()-(score->canvas.size.height+grid->canvas.size.height+pieces->canvas.size.height))/2});
+    pieces->canvas = (Canvas){
+        {0},
+        GridToPixel((GridSize){cols, CEIL_DIV(num_pieces, pieces_per_grid_length) * piece_length}),
+        NULL};
+    ShiftCanvas(
+        StackAbove(&score->canvas, StackAbove(&grid->canvas, &pieces->canvas)),
+        (ScreenPos){(GetScreenWidth() - grid->canvas.size.width) / 2,
+                    (GetScreenHeight() - (score->canvas.size.height + grid->canvas.size.height +
+                                          pieces->canvas.size.height)) /
+                        2});
   } else {
     pieces->canvas =
         (Canvas){{0},
@@ -362,7 +367,7 @@ void GetFullRows(const Grid* grid, bool* full_rows) {
   }
 }
 
-void ClearSquares(Grid* grid) {
+void ClearSquares(Grid* grid, Score* score) {
   bool* full_cols = calloc(cols, sizeof(*full_cols));
   GetFullCols(grid, full_cols);
   bool* full_rows = calloc(rows, sizeof(*full_rows));
@@ -371,6 +376,7 @@ void ClearSquares(Grid* grid) {
     for (int row = 0; row != rows; row++) {
       if (full_cols[col] || full_rows[row]) {
         grid->arr[GRID_IDX(col, row)] = 0;
+        if (score) score->val++;
       }
     }
   }
@@ -459,7 +465,7 @@ bool DoPiecesFitRecurse(const Grid* grid_ptr, const Pieces* pieces_ptr, int rem_
         Pieces pieces = PiecesCopy(pieces_ptr);
 
         DropPiece(&grid, &pieces.arr[p_idx], gpos);
-        ClearSquares(&grid);
+        ClearSquares(&grid, NULL);
         bool success = DoPiecesFitRecurse(&grid, &pieces, rem_levels - 1);
 
         PiecesDestroy(&pieces);
@@ -678,6 +684,13 @@ void DrawPieces(Grid* grid, Pieces* pieces) {
   }
 }
 
+void DrawScore(const Score* score) {
+  const char* text = TextFormat("%d", score->val);
+  Vector2 text_size = MeasureTextEx(GetFontDefault(), text, squareLength, squareLength / 10.0);
+  DrawText(text, score->canvas.origin.x + (score->canvas.size.width - text_size.x) / 2,
+           score->canvas.origin.y + (score->canvas.size.height - text_size.y) / 2 + squareLength * (1 - squareAmount), squareLength, LIGHTGRAY);
+}
+
 void OnMouseClick(Pieces* pieces) {
   if (!IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) return;
   ScreenPos mousePos = {GetMouseX(), GetMouseY()};
@@ -736,12 +749,13 @@ int main(void) {
       case playing:
         OnMouseClick(&pieces);
         OnMouseRelease(&grid, &pieces);
-        ClearSquares(&grid);
+        ClearSquares(&grid, &score);
         RefillPieces(&grid, &pieces);
         CanPlacePiece(&grid, &pieces, &gstate);
 
         BeginDrawing();
         ClearBackground((Color){46, 46, 46, 255});
+        DrawScore(&score);
         RenderGrid(&grid);
         DrawPieces(&grid, &pieces);
         EndDrawing();
