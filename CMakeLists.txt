@@ -20,17 +20,31 @@ include(FetchContent)
 FetchContent_Declare(
   raylib
   GIT_REPOSITORY https://github.com/raysan5/raylib.git
-  GIT_TAG 5.5  # or a specific commit
+  GIT_TAG 5.5
 )
 
 FetchContent_MakeAvailable(raylib)
 
+FetchContent_Declare(
+  raygui
+  GIT_REPOSITORY https://github.com/raysan5/raygui.git
+  GIT_TAG 4.0
+)
+
+FetchContent_MakeAvailable(raygui)
+
+add_library(raygui INTERFACE)
+target_include_directories(raygui INTERFACE ${raygui_SOURCE_DIR}/src)
+
+message(${raygui_SOURCE_DIR}/src)
+
 # compile the client
 add_executable(blockgame
     blockgame.c
+    raygui_impl.c
 )
 
-target_link_libraries(blockgame PRIVATE raylib)
+target_link_libraries(blockgame PRIVATE raylib raygui)
 setup_target_warnings_and_sanitizers(blockgame)
 
 # copy compile_commands.json from the build dir to the source dir

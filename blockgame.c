@@ -1,4 +1,6 @@
 #include <limits.h>
+#include <raygui.h>
+#include <raylib.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -6,7 +8,6 @@
 #include <string.h>
 #include <time.h>
 
-#include "raylib.h"
 
 #define CEIL_DIV(x, y) (((x) + (y) - 1) / (y))
 #define ARRAY_LENGTH(x) (sizeof(x) / sizeof((x)[0]))
@@ -741,18 +742,18 @@ void DrawScore(Grid* grid, Score* score) {
   DrawText(score_text, score_text_canvas.origin.x,
            score_text_canvas.origin.y + squareLength * (1 - squareAmount), squareLength, LIGHTGRAY);
 
-           if (score->score_text_timer > 0) {
+  if (score->score_text_timer > 0) {
     score->combo_lost_timer = 0;
     DrawText(temp_score_text, temp_score_text_canvas.origin.x, temp_score_text_canvas.origin.y,
              squareLength / 2, GREEN);
     if (score->combo > 1) {
-        DrawText(combo_text, combo_text_canvas.origin.x, combo_text_canvas.origin.y,
-                 squareLength / 2, MAROON);
+      DrawText(combo_text, combo_text_canvas.origin.x, combo_text_canvas.origin.y, squareLength / 2,
+               MAROON);
     }
     score->score_text_timer--;
   } else if (score->combo_lost_timer > 0) {
-        DrawText(combo_lost_text, combo_text_canvas.origin.x, combo_text_canvas.origin.y,
-                 squareLength / 2, MAROON);
+    DrawText(combo_lost_text, combo_text_canvas.origin.x, combo_text_canvas.origin.y,
+             squareLength / 2, MAROON);
     score->combo_lost_timer--;
   }
 }
@@ -812,11 +813,18 @@ int main(void) {
   bool stop = false;
   GridInit(&grid);
   BuildPieces(&grid, &pieces);
-  gamestate gstate = playing;
+  gamestate gstate = menu;
   int fade = 0;
   score.combo_timer = combo_time;
   while (!WindowShouldClose() && !stop) {
     switch (gstate) {
+      case menu:
+        BeginDrawing();
+        if (GuiButton((Rectangle){190, 70, 50, 20}, "Button")) {
+          stop = true;
+        }
+        EndDrawing();
+        break;
       case playing:
         OnMouseClick(&pieces);
         UpdateCombo(&score);
