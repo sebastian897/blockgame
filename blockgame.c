@@ -162,13 +162,11 @@ void CenterCanvas(const Canvas* c1, bool c1_all_canvases, Canvas* c2, bool c2_al
 }
 
 Canvas* StackAbove(Canvas* top, Canvas* bot) {
-  int dx = bot->origin.x - top->origin.x;
   int dy = bot->origin.y - top->origin.y;
   int max_height = GetCanvasSize(top).height;
 
   Canvas* curr = bot;
   while (curr != NULL) {
-    curr->origin.x -= dx;
     curr->origin.y -= dy;
     curr->origin.y += max_height;
     curr = curr->next;
@@ -179,13 +177,11 @@ Canvas* StackAbove(Canvas* top, Canvas* bot) {
 
 Canvas* StackLeft(Canvas* left, Canvas* right) {
   int dx = right->origin.x - left->origin.x;
-  int dy = right->origin.y - left->origin.y;
   int max_width = GetCanvasSize(left).width;
 
   Canvas* curr = right;
   while (curr != NULL) {
     curr->origin.x -= dx;
-    curr->origin.y -= dy;
     curr->origin.x += max_width;
     curr = curr->next;
   }
@@ -796,7 +792,7 @@ bool OnMouseRelease(Grid* grid, Pieces* pieces, int* squares_cleared) {
 }
 
 int main(void) {
-  srand(1);
+  srand(time(NULL));
   SetTargetFPS(fps);
   Score score = {0};
   Grid grid = GridCreate();
@@ -838,7 +834,6 @@ int main(void) {
         DrawPieces(&grid, &pieces);
         DrawScore(&grid, &score);
         EndDrawing();
-        // stop = true;
         score.combo_timer--;
         break;
       case game_over:
