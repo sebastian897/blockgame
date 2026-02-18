@@ -123,6 +123,7 @@ typedef struct Pieces {
 } Pieces;
 
 Canvas origin = {{0, 0}, {0, 0}, NULL};
+Canvas screen_canvas = {0};
 
 void ShiftCanvas(Canvas* head, ScreenPos offest) {
   Canvas* curr = head;
@@ -151,9 +152,10 @@ PixelSize GetCanvasSize(const Canvas* canvas) {
   return max_size;
 }
 
-void CenterCanvas(const Canvas* c1, Canvas* c2, bool x, bool y) {
-  PixelSize c1_size = GetCanvasSize(c1);
-  PixelSize c2_size = GetCanvasSize(c2);
+void CenterCanvas(const Canvas* c1, bool c1_all_canvases, Canvas* c2, bool c2_all_canvases, bool x,
+                  bool y) {
+  PixelSize c1_size = c1_all_canvases ? GetCanvasSize(c1) : c1->size;
+  PixelSize c2_size = c2_all_canvases ? GetCanvasSize(c2) : c2->size;
   ScreenPos offset = {x ? c1->origin.x + (c1_size.width - c2_size.width) / 2 : 0,
                       y ? c1->origin.y + (c1_size.height - c2_size.height) / 2 : 0};
   ShiftCanvas(c2, offset);
@@ -189,6 +191,10 @@ Canvas* StackLeft(Canvas* left, Canvas* right) {
   }
   PrependCanvas(right, left);
   return left;
+}
+
+PixelSize VectorToPixel(Vector2 v) {
+  return (PixelSize){v.x, v.y};
 }
 
 PixelSize GridToPixel(GridSize size) {
@@ -257,7 +263,7 @@ void ReCalc(void) {
   const int screenWidth = GetScreenWidth();
   const int screenHeight = GetScreenHeight();
 #else
-  const int screenWidth = GetMonitorWidth(GetCurrentMonitor()) * windowSize / 2;
+  const int screenWidth = GetMonitorWidth(GetCurrentMonitor()) * windowSize;
   const int screenHeight = GetMonitorHeight(GetCurrentMonitor()) * windowSize;
 #endif
   SwapGrid(screenWidth, screenHeight);
@@ -295,14 +301,14 @@ void PositionCanvases(Grid* grid, Pieces* pieces, Score* score) {
         GridToPixel((GridSize){cols, CEIL_DIV(num_pieces, pieces_per_grid_length) * piece_length}),
         NULL};
     Canvas* total_canvas = StackAbove(&score->canvas, StackAbove(&grid->canvas, &pieces->canvas));
-    Canvas screen_canvas = {{0, 0}, {GetScreenWidth(), GetScreenHeight()}, NULL};
-    CenterCanvas(&screen_canvas, total_canvas, true, true);
+    CenterCanvas(&screen_canvas, true, total_canvas, true, true, true);
   } else {
     pieces->canvas =
         (Canvas){{0},
                  GridToPixel((GridSize){num_pieces / pieces_per_grid_length * piece_length, rows}),
                  NULL};
-    StackAbove(&score->canvas, StackLeft(&grid->canvas, &pieces->canvas));
+    Canvas* total_canvas = StackAbove(&score->canvas, StackLeft(&grid->canvas, &pieces->canvas));
+    CenterCanvas(&screen_canvas, true, total_canvas, true, true, true);
   }
 }
 
@@ -715,46 +721,42 @@ void DrawPieces(Grid* grid, Pieces* pieces) {
   }
 }
 
-void DrawScore(Score* score) {
+void DrawScore(Grid* grid, Score* score) {
   const char* score_text = TextFormat("%d", score->val);
   const char* temp_score_text = TextFormat(" +%d", score->temp_score);
   const char* combo_text = TextFormat(" x%d", score->combo);
   const char* combo_lost_text = TextFormat("x1");
-
   Vector2 score_text_size =
       MeasureTextEx(GetFontDefault(), score_text, squareLength, squareLength / 10.0);
-  DrawText(score_text, score->canvas.origin.x + (score->canvas.size.width - +score_text_size.x) / 2,
-           score->canvas.origin.y + (score->canvas.size.height - score_text_size.y) / 2 +
-               squareLength * (1 - squareAmount),
-           squareLength, LIGHTGRAY);
   Vector2 temp_score_text_size =
       MeasureTextEx(GetFontDefault(), temp_score_text, squareLength / 2.0, squareLength / 10.0);
   Vector2 combo_text_size =
       MeasureTextEx(GetFontDefault(), combo_text, squareLength / 2.0, squareLength / 10.0);
-  Vector2 combo_lost_text_size =
-      MeasureTextEx(GetFontDefault(), combo_text, squareLength / 2.0, squareLength / 10.0);
-  if (score->score_text_timer > 0 && score->combo > 1) {
+
+  Canvas score_text_canvas = {{0}, VectorToPixel(score_text_size), NULL};
+  CenterCanvas(&grid->canvas, false, &score_text_canvas, false, true, false);
+  CenterCanvas(&score->canvas, false, &score_text_canvas, false, false, true);
+
+  Canvas temp_score_text_canvas = {{0}, VectorToPixel(temp_score_text_size), NULL};
+  Canvas combo_text_canvas = {{0}, VectorToPixel(combo_text_size), NULL};
+  StackLeft(&score_text_canvas, StackLeft(&temp_score_text_canvas, &combo_text_canvas));
+  CenterCanvas(&score->canvas, false, &temp_score_text_canvas, true, false, true);
+
+  DrawText(score_text, score_text_canvas.origin.x,
+           score_text_canvas.origin.y + squareLength * (1 - squareAmount), squareLength, LIGHTGRAY);
+
+           if (score->score_text_timer > 0) {
     score->combo_lost_timer = 0;
-    DrawText(temp_score_text,
-             score->canvas.origin.x + (score->canvas.size.width - score_text_size.x) / 2 +
-                 score_text_size.x,
-             score->canvas.origin.y + (score->canvas.size.height - temp_score_text_size.y) / 2 +
-                 squareLength * (1 - squareAmount),
+    DrawText(temp_score_text, temp_score_text_canvas.origin.x, temp_score_text_canvas.origin.y,
              squareLength / 2, GREEN);
-    DrawText(combo_text,
-             score->canvas.origin.x + (score->canvas.size.width - score_text_size.x) / 2 +
-                 score_text_size.x + temp_score_text_size.x,
-             score->canvas.origin.y + (score->canvas.size.height - combo_text_size.y) / 2 +
-                 squareLength * (1 - squareAmount),
-             squareLength / 2, MAROON);
+    if (score->combo > 1) {
+        DrawText(combo_text, combo_text_canvas.origin.x, combo_text_canvas.origin.y,
+                 squareLength / 2, MAROON);
+    }
     score->score_text_timer--;
   } else if (score->combo_lost_timer > 0) {
-    DrawText(combo_lost_text,
-             score->canvas.origin.x + (score->canvas.size.width - score_text_size.x) / 2 +
-                 score_text_size.x + combo_lost_text_size.x,
-             score->canvas.origin.y + (score->canvas.size.height - combo_lost_text_size.y) / 2 +
-                 squareLength * (1 - squareAmount),
-             squareLength / 2, MAROON);
+        DrawText(combo_lost_text, combo_text_canvas.origin.x, combo_text_canvas.origin.y,
+                 squareLength / 2, MAROON);
     score->combo_lost_timer--;
   }
 }
@@ -809,6 +811,7 @@ int main(void) {
   SetWindowPosition(x, y);
 #endif
   ReCalc();
+  screen_canvas.size = (PixelSize){GetScreenWidth(), GetScreenHeight()};
   PositionCanvases(&grid, &pieces, &score);
   bool stop = false;
   GridInit(&grid);
@@ -833,7 +836,7 @@ int main(void) {
         ClearBackground((Color){46, 46, 46, 255});
         RenderGrid(&grid);
         DrawPieces(&grid, &pieces);
-        DrawScore(&score);
+        DrawScore(&grid, &score);
         EndDrawing();
         // stop = true;
         score.combo_timer--;
