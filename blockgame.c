@@ -138,18 +138,33 @@ Canvas* PrependCanvas(Canvas* head, Canvas* new) {
   return new;
 }
 
+PixelSize GetCanvasSize(const Canvas* canvas) {
+  PixelSize max_size = {0};
+  const Canvas* curr = canvas;
+  while (curr != NULL) {
+    PixelSize total_size = {curr->size.width + (curr->origin.x - canvas->origin.x),
+                            curr->size.height + (curr->origin.y - canvas->origin.y)};
+    if (total_size.width > max_size.width) max_size.width = total_size.width;
+    if (total_size.height > max_size.height) max_size.height = total_size.height;
+    curr = curr->next;
+  }
+  return max_size;
+}
+
+void CenterCanvas(const Canvas* c1, Canvas* c2, bool x, bool y) {
+  PixelSize c1_size = GetCanvasSize(c1);
+  PixelSize c2_size = GetCanvasSize(c2);
+  ScreenPos offset = {x ? c1->origin.x + (c1_size.width - c2_size.width) / 2 : 0,
+                      y ? c1->origin.y + (c1_size.height - c2_size.height) / 2 : 0};
+  ShiftCanvas(c2, offset);
+}
+
 Canvas* StackAbove(Canvas* top, Canvas* bot) {
   int dx = bot->origin.x - top->origin.x;
   int dy = bot->origin.y - top->origin.y;
-  int max_height = 0;
-  Canvas* curr = top;
-  while (curr != NULL) {
-    int total_height = curr->size.height + (curr->origin.y - top->origin.y);
-    if (total_height > max_height) max_height = total_height;
-    curr = curr->next;
-  }
+  int max_height = GetCanvasSize(top).height;
 
-  curr = bot;
+  Canvas* curr = bot;
   while (curr != NULL) {
     curr->origin.x -= dx;
     curr->origin.y -= dy;
@@ -163,15 +178,9 @@ Canvas* StackAbove(Canvas* top, Canvas* bot) {
 Canvas* StackLeft(Canvas* left, Canvas* right) {
   int dx = right->origin.x - left->origin.x;
   int dy = right->origin.y - left->origin.y;
-  int max_width = 0;
-  Canvas* curr = left;
-  while (curr != NULL) {
-    int total_width = curr->size.width + (curr->origin.x - left->origin.x);
-    if (total_width > max_width) max_width = total_width;
-    curr = curr->next;
-  }
+  int max_width = GetCanvasSize(left).width;
 
-  curr = right;
+  Canvas* curr = right;
   while (curr != NULL) {
     curr->origin.x -= dx;
     curr->origin.y -= dy;
@@ -248,7 +257,7 @@ void ReCalc(void) {
   const int screenWidth = GetScreenWidth();
   const int screenHeight = GetScreenHeight();
 #else
-  const int screenWidth = GetMonitorWidth(GetCurrentMonitor()) * windowSize;
+  const int screenWidth = GetMonitorWidth(GetCurrentMonitor()) * windowSize / 2;
   const int screenHeight = GetMonitorHeight(GetCurrentMonitor()) * windowSize;
 #endif
   SwapGrid(screenWidth, screenHeight);
@@ -285,12 +294,9 @@ void PositionCanvases(Grid* grid, Pieces* pieces, Score* score) {
         {0},
         GridToPixel((GridSize){cols, CEIL_DIV(num_pieces, pieces_per_grid_length) * piece_length}),
         NULL};
-    ShiftCanvas(
-        StackAbove(&score->canvas, StackAbove(&grid->canvas, &pieces->canvas)),
-        (ScreenPos){(GetScreenWidth() - grid->canvas.size.width) / 2,
-                    (GetScreenHeight() - (score->canvas.size.height + grid->canvas.size.height +
-                                          pieces->canvas.size.height)) /
-                        2});
+    Canvas* total_canvas = StackAbove(&score->canvas, StackAbove(&grid->canvas, &pieces->canvas));
+    Canvas screen_canvas = {{0, 0}, {GetScreenWidth(), GetScreenHeight()}, NULL};
+    CenterCanvas(&screen_canvas, total_canvas, true, true);
   } else {
     pieces->canvas =
         (Canvas){{0},
@@ -748,7 +754,8 @@ void DrawScore(Score* score) {
                  score_text_size.x + combo_lost_text_size.x,
              score->canvas.origin.y + (score->canvas.size.height - combo_lost_text_size.y) / 2 +
                  squareLength * (1 - squareAmount),
-             squareLength / 2, MAROON);    score->combo_lost_timer--;
+             squareLength / 2, MAROON);
+    score->combo_lost_timer--;
   }
 }
 
@@ -814,7 +821,7 @@ int main(void) {
       case playing:
         OnMouseClick(&pieces);
         UpdateCombo(&score);
-        int squares_cleared=0;
+        int squares_cleared = 0;
         if (OnMouseRelease(&grid, &pieces, &squares_cleared)) {
           // only check for gameover if sth actually changed
           CanPlacePiece(&grid, &pieces, &gstate);
