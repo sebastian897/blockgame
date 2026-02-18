@@ -831,8 +831,8 @@ int main(void) {
         BeginDrawing();
         ClearBackground((Color){46, 46, 46, 255});
         RenderGrid(&grid);
-        DrawPieces(&grid, &pieces);
         DrawScore(&grid, &score);
+        DrawPieces(&grid, &pieces);
         EndDrawing();
         score.combo_timer--;
         break;
