@@ -8,6 +8,7 @@
 #include <string.h>
 #include <time.h>
 
+#include "../styles/jungle/style_jungle.h"  // raygui style: jungle
 
 #define CEIL_DIV(x, y) (((x) + (y) - 1) / (y))
 #define ARRAY_LENGTH(x) (sizeof(x) / sizeof((x)[0]))
@@ -122,6 +123,24 @@ typedef struct Pieces {
   Piece* arr;
   Canvas canvas;
 } Pieces;
+
+typedef struct Game {
+  Score score;
+  Grid grid;
+  Pieces pieces;
+  gamestate gstate;
+  int fade;
+} Game;
+
+typedef struct MenuOp {
+  int rows;
+  int cols;
+  int num_pieces;
+  int piece_length;
+  char* button_label;
+} MenuOp;
+
+MenuOp menu_ops[] = {{9, 9, 3, 3, "Normal"}, {15, 4, 4, 3, "Slim"}};
 
 Canvas origin = {{0, 0}, {0, 0}, NULL};
 Canvas screen_canvas = {0};
@@ -792,73 +811,97 @@ bool OnMouseRelease(Grid* grid, Pieces* pieces, int* squares_cleared) {
   return dropped;
 }
 
-int main(void) {
-  srand(time(NULL));
-  SetTargetFPS(fps);
-  Score score = {0};
-  Grid grid = GridCreate();
-  Pieces pieces = PiecesCreate();
+void GameInit(Game* game) {
+  game->score = (Score){0};
+  game->grid = GridCreate();
+  game->pieces = PiecesCreate();
 
-#if defined(PLATFORM_ANDROID)
-  InitWindow(0, 0, "BlockGame");
-#else
-  InitWindow(800, 600, "BlockGame");
+#if defined(PLATFORM_DESKTOP)
   int x = GetMonitorWidth(GetCurrentMonitor()) * (1 - windowSize) / 2;
   int y = GetMonitorHeight(GetCurrentMonitor()) * (1 - windowSize) / 2;
   SetWindowPosition(x, y);
 #endif
   ReCalc();
   screen_canvas.size = (PixelSize){GetScreenWidth(), GetScreenHeight()};
-  PositionCanvases(&grid, &pieces, &score);
+  PositionCanvases(&game->grid, &game->pieces, &game->score);
+  GridInit(&game->grid);
+  BuildPieces(&game->grid, &game->pieces);
+  game->score.combo_timer = combo_time;
+}
+
+void RenderMenu(Game* game) {
+  PixelSize b_size = {GetScreenWidth() / 2, (GetScreenHeight() / 4 / ARRAY_LENGTH(menu_ops))};
+  for (int b_idx = 0; b_idx != ARRAY_LENGTH(menu_ops); b_idx++) {
+    MenuOp* op = &menu_ops[b_idx];
+    if (GuiButton((Rectangle){b_size.width / 2,
+                              (GetScreenHeight() - ((1 - b_idx) * b_size.height * 3)) / 2,
+                              b_size.width, b_size.height},
+                  menu_ops[b_idx].button_label)) {
+      cols = op->cols;
+      rows = op->rows;
+      num_pieces = op->num_pieces;
+      piece_length = op->piece_length;
+      GameInit(game);
+      game->gstate = playing;
+    }
+  }
+}
+
+int main(void) {
+  srand(time(NULL));
+  SetTargetFPS(fps);
+#if defined(PLATFORM_ANDROID)
+  InitWindow(0, 0, "BlockGame");
+#else
+  InitWindow(800, 600, "BlockGame");
+#endif
+  GuiLoadStyleJungle();
+  GuiSetStyle(DEFAULT, TEXT_SIZE, 50);
+
+  Game game = {0};
   bool stop = false;
-  GridInit(&grid);
-  BuildPieces(&grid, &pieces);
-  gamestate gstate = menu;
-  int fade = 0;
-  score.combo_timer = combo_time;
   while (!WindowShouldClose() && !stop) {
-    switch (gstate) {
+    switch (game.gstate) {
       case menu:
         BeginDrawing();
-        if (GuiButton((Rectangle){190, 70, 50, 20}, "Button")) {
-          stop = true;
-        }
+        RenderMenu(&game);
         EndDrawing();
         break;
       case playing:
-        OnMouseClick(&pieces);
-        UpdateCombo(&score);
+        OnMouseClick(&game.pieces);
+        UpdateCombo(&game.score);
         int squares_cleared = 0;
-        if (OnMouseRelease(&grid, &pieces, &squares_cleared)) {
+        if (OnMouseRelease(&game.grid, &game.pieces, &squares_cleared)) {
           // only check for gameover if sth actually changed
-          CanPlacePiece(&grid, &pieces, &gstate);
+          CanPlacePiece(&game.grid, &game.pieces, &game.gstate);
         }
-        UpdateScore(&score, squares_cleared);
-        RefillPieces(&grid, &pieces);
+        UpdateScore(&game.score, squares_cleared);
+        RefillPieces(&game.grid, &game.pieces);
 
         BeginDrawing();
         ClearBackground((Color){46, 46, 46, 255});
-        RenderGrid(&grid);
-        DrawScore(&grid, &score);
-        DrawPieces(&grid, &pieces);
+        RenderGrid(&game.grid);
+        DrawScore(&game.grid, &game.score);
+        DrawPieces(&game.grid, &game.pieces);
         EndDrawing();
-        score.combo_timer--;
+        game.score.combo_timer--;
         break;
       case game_over:
         BeginDrawing();
         ClearBackground((Color){46, 46, 46, 255});
-        RenderGrid(&grid);
-        DrawPieces(&grid, &pieces);
-        DrawRectangleRec((Rectangle){0, 0, screen_width, screen_height}, (Color){0, 0, 0, fade});
+        RenderGrid(&game.grid);
+        DrawPieces(&game.grid, &game.pieces);
+        DrawRectangleRec((Rectangle){0, 0, screen_width, screen_height},
+                         (Color){0, 0, 0, game.fade});
         EndDrawing();
-        if (fade < MAX_A - 1) fade += 2;
+        if (game.fade < MAX_A - 1) game.fade += 2;
         break;
       default:
         exit(1);
     }
   }
   CloseWindow();
-  GridDestroy(&grid);
-  PiecesDestroy(&pieces);
+  GridDestroy(&game.grid);
+  PiecesDestroy(&game.pieces);
   return 0;
 }
