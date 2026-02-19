@@ -1,5 +1,4 @@
 #include <limits.h>
-#include <raygui.h>
 #include <raylib.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -8,7 +7,14 @@
 #include <string.h>
 #include <time.h>
 
-#include "../styles/jungle/style_jungle.h"  // raygui style: jungle
+#if defined(PLATFORM_DESKTOP)
+#include "raygui.h"
+#include "../styles/jungle/style_jungle.h"
+#else
+#define RAYGUI_IMPLEMENTATION
+#include "raygui.h"
+#include "style_jungle.h"
+#endif
 
 #define CEIL_DIV(x, y) (((x) + (y) - 1) / (y))
 #define ARRAY_LENGTH(x) (sizeof(x) / sizeof((x)[0]))
