@@ -40,7 +40,7 @@ enum {
   combo_time = fps * 10
 };
 
-typedef enum gamestate { menu, playing, game_over } gamestate;
+typedef enum gamestate { menu = 0, playing, game_over } gamestate;
 
 const float windowSize = 0.8;
 const float squareAmount = 0.95;
@@ -461,6 +461,7 @@ Grid GridCreate() {
 void GridDestroy(Grid* grid) {
   if (grid->arr != NULL) {
     free(grid->arr);
+    grid->arr = NULL;
   }
 }
 
@@ -495,8 +496,10 @@ Pieces PiecesCreate(void) {
 }
 
 void PiecesDestroy(Pieces* p) {
-  free(p->arr);
-  p->arr = NULL;
+  if (p->arr) {
+    free(p->arr);
+    p->arr = NULL;
+  }
 }
 
 Pieces PiecesCopy(const Pieces* src) {
@@ -899,14 +902,16 @@ int main(void) {
         RenderGrid(&game.grid);
         DrawPieces(&game.grid, &game.pieces);
         DrawRectangleRec((Rectangle){0, 0, screen_width, screen_height},
-                         (Color){0, 0, 0, game.fade});
+                         Fade(BLACK, game.fade));
         EndDrawing();
         if (game.fade < MAX_A - 1) {
           game.fade += 2;
         } else {
           GridDestroy(&game.grid);
           PiecesDestroy(&game.pieces);
+#if defined(PLATFORM_DESKTOP)
           SetWindowSize(800, 600);
+#endif
           game.gstate = menu;
         }
         break;
@@ -915,9 +920,9 @@ int main(void) {
     }
   }
   CloseWindow();
-  if (game.grid.arr) {  // only for close window forced exit
-    GridDestroy(&game.grid);
-    PiecesDestroy(&game.pieces);
-  }
+  // may already be freed in game over gstate, in which case double free is prevented in *Destroy
+  // but in case user quit while playing or while on menu, free now.
+  GridDestroy(&game.grid);
+  PiecesDestroy(&game.pieces);
   return 0;
 }
