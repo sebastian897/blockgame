@@ -812,6 +812,7 @@ bool OnMouseRelease(Grid* grid, Pieces* pieces, int* squares_cleared) {
 }
 
 void GameInit(Game* game) {
+  game->fade = 0;
   game->score = (Score){0};
   game->grid = GridCreate();
   game->pieces = PiecesCreate();
@@ -894,14 +895,23 @@ int main(void) {
         DrawRectangleRec((Rectangle){0, 0, screen_width, screen_height},
                          (Color){0, 0, 0, game.fade});
         EndDrawing();
-        if (game.fade < MAX_A - 1) game.fade += 2;
+        if (game.fade < MAX_A - 1) {
+          game.fade += 2;
+        } else {
+          GridDestroy(&game.grid);
+          PiecesDestroy(&game.pieces);
+          SetWindowSize(800, 600);
+          game.gstate = menu;
+        }
         break;
       default:
         exit(1);
     }
   }
   CloseWindow();
-  GridDestroy(&game.grid);
-  PiecesDestroy(&game.pieces);
+  if (game.grid.arr) {  // only for close window forced exit
+    GridDestroy(&game.grid);
+    PiecesDestroy(&game.pieces);
+  }
   return 0;
 }
