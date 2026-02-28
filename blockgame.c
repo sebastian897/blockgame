@@ -902,7 +902,7 @@ int main(void) {
         RenderGrid(&game.grid);
         DrawPieces(&game.grid, &game.pieces);
         DrawRectangleRec((Rectangle){0, 0, screen_width, screen_height},
-                         Fade(BLACK, game.fade));
+                         (Color){0, 0, 0, game.fade});
         EndDrawing();
         if (game.fade < MAX_A - 1) {
           game.fade += 2;
