@@ -32,7 +32,6 @@ bool pieces_at_bottom;
 #define PIECE_IDX(col, row) ((col) * piece_length + (row))
 
 enum {
-  square_probability_max = 75,
   square_probability_min = 20,
   transparency = 127,
   phone_bottom_offset = 1,
@@ -130,12 +129,24 @@ typedef struct Pieces {
   Canvas canvas;
 } Pieces;
 
+typedef struct Move {
+  GridPos pos;
+  int p_idx;
+} Move;
+
+typedef struct Moves {
+  Move* arr;
+} Moves;
+
 typedef struct Game {
   Score score;
   Grid grid;
   Pieces pieces;
+  Moves moves;
   gamestate gstate;
   int fade;
+  int square_probability;
+  bool hint;
 } Game;
 
 typedef struct MenuOp {
@@ -143,10 +154,14 @@ typedef struct MenuOp {
   int cols;
   int num_pieces;
   int piece_length;
+  int square_probability;
   char* button_label;
 } MenuOp;
 
-MenuOp menu_ops[] = {{9, 9, 3, 3, "Normal"}, {15, 4, 4, 3, "Slim"}};
+
+
+
+MenuOp menu_ops[] = {{9, 9, 3, 3, 75, "Normal"}, {15, 4, 4, 3, 75, "Slim"}, {5, 5, 3, 3, 35, "Small"}, {15, 15, 3, 3, 45, "Strategy"}};
 
 Canvas origin = {{0, 0}, {0, 0}, NULL};
 Canvas screen_canvas = {0};
@@ -270,6 +285,9 @@ ScreenPos SubScreenPos(ScreenPos sp1, ScreenPos sp2) {
 }
 GridPos AddGridPos(GridPos cp1, GridPos cp2) {
   return (GridPos){cp1.x + cp2.x, cp1.y + cp2.y};
+}
+bool EqualGridPos(GridPos gp1, GridPos gp2) {
+  return gp1.x == gp2.x && gp1.y == gp2.y;
 }
 
 void SwapGrid(int width, int height) {
@@ -520,11 +538,75 @@ Pieces PiecesCopy(const Pieces* src) {
   return dst;
 }
 
+Moves MovesCreate(void) {
+  Moves m = {0};
+  size_t total = num_pieces * sizeof(m.arr[0]);
+
+  // one big allocation
+  void* block = malloc(total);
+  if (!block) {
+    fprintf(stderr, "malloc failed\n");
+    exit(1);
+  }
+
+  m.arr = block;
+  return m;
+}
+
+void MovesDestroy(Moves* m) {
+  if (m->arr) {
+    free(m->arr);
+    m->arr = NULL;
+  }
+}
+
+Moves MovesCopy(const Moves* src) {
+  Moves dst = *src;
+
+  size_t total = num_pieces * sizeof(src->arr[0]);
+
+  void* block = malloc(total);
+  if (!block) {
+    perror("malloc");
+    exit(1);
+  }
+
+  memcpy(block, src->arr, total);
+  dst.arr = block;
+  return dst;
+}
+
+Move EmptyMove(void) {
+  Move move = {0};
+  move.p_idx = -1;
+  return move;
+}
+
+bool EqualMove(Move m1, Move m2) {
+  return m1.p_idx == m2.p_idx && EqualGridPos(m1.pos, m2.pos);
+}
+
+void EmptyMoves(Moves* m) {
+  for (int i = 0; i > num_pieces; i ++) {
+    m->arr[i].p_idx = -1;
+  }
+}
+
+int FindFirstMove(Moves* m) {
+  // printf("hello\n");
+  for (int i = num_pieces-1; i >= 0; i--) {
+    // printf("i=%d\n", i);
+    // printf("p_idx=%d\n", m->arr[i].p_idx);
+    if (m->arr[i].p_idx>=0) return i; 
+  }
+  return -1;
+}
+
 int DropPiece(Grid* grid, Piece* piece, GridPos gpos);
 
 bool IsPiecesEmpty(const Pieces* pieces);
 
-bool DoPiecesFit(const Grid* grid_ptr, const Pieces* pieces_ptr, int rem_levels) {
+bool DoPiecesFit(const Grid* grid_ptr, const Pieces* pieces_ptr, Moves* moves_ptr, int rem_levels) {
   if (IsPiecesEmpty(pieces_ptr) || rem_levels == 0) return true;
   for (int p_idx = 0; p_idx != num_pieces; p_idx++) {
     if (pieces_ptr->arr[p_idx].pal_idx == 0) continue;
@@ -534,9 +616,16 @@ bool DoPiecesFit(const Grid* grid_ptr, const Pieces* pieces_ptr, int rem_levels)
         if (!DoesPieceFit(grid_ptr, &pieces_ptr->arr[p_idx], gpos)) continue;
         Grid grid = GridCopy(grid_ptr);
         Pieces pieces = PiecesCopy(pieces_ptr);
-
+        
+        // Moves moves = MovesCopy(moves_ptr);
+        // printf("rem_levels = %d\n", rem_levels);
+        if (moves_ptr!=NULL) {
+          int m_idx = rem_levels-1;
+          moves_ptr->arr[m_idx].p_idx = p_idx;
+          moves_ptr->arr[m_idx].pos = gpos;
+        }
         DropPiece(&grid, &pieces.arr[p_idx], gpos);
-        bool success = DoPiecesFit(&grid, &pieces, rem_levels - 1);
+        bool success = DoPiecesFit(&grid, &pieces, moves_ptr, rem_levels - 1);
 
         PiecesDestroy(&pieces);
         GridDestroy(&grid);
@@ -548,7 +637,7 @@ bool DoPiecesFit(const Grid* grid_ptr, const Pieces* pieces_ptr, int rem_levels)
 }
 
 void CanPlacePiece(Grid* grid, Pieces* pieces, gamestate* gstate) {
-  if (!DoPiecesFit(grid, pieces, 1)) *gstate = game_over;  // only 1 level of look ahead
+  if (!DoPiecesFit(grid, pieces, NULL, 1)) *gstate = game_over;  // only 1 level of look ahead
 }
 
 bool IsTopRowEmpty(Shape shape) {
@@ -623,9 +712,8 @@ GridPos GetShadowPos(ScreenPos spos, Grid* grid) {
   return CanvasToGrid(ScreenToCanvas(effective_dropping_pos, grid->canvas));
 }
 
-void BuildPieces(Grid* grid, Pieces* pieces) {
+void BuildPieces(Grid* grid, Pieces* pieces, Moves* moves, int prob) {
   int attempts = 0;
-  int prob = square_probability_max;
   uint8_t pal_idxs[ARRAY_LENGTH(palette) - 1];
   shuffle_pal_idxs(pal_idxs, num_pieces);
   while (true) {
@@ -635,9 +723,12 @@ void BuildPieces(Grid* grid, Pieces* pieces) {
       BuildPiece(&pieces->arr[i], prob);
       pieces->arr[i].pal_idx = pal_idxs[i];
     }
-    if (DoPiecesFit(grid, pieces, INT_MAX)) break;
+    if (DoPiecesFit(grid, pieces, moves, num_pieces)) break;
   }
   printf("attempts = %d\n", attempts);
+  // for (int i = 0; i != num_pieces; i++) {
+  //   printf("move: idx=%d pos=(%d,%d)\n", moves->arr[i].p_idx, moves->arr[i].pos.x, moves->arr[i].pos.y);
+  // }
 }
 
 bool IsPiecesEmpty(const Pieces* pieces) {
@@ -647,9 +738,9 @@ bool IsPiecesEmpty(const Pieces* pieces) {
   return true;
 }
 
-void RefillPieces(Grid* grid, Pieces* pieces) {
+void RefillPieces(Grid* grid, Pieces* pieces, Moves* moves, int prob) {
   if (IsPiecesEmpty(pieces)) {
-    BuildPieces(grid, pieces);
+    BuildPieces(grid, pieces, moves, prob);
   }
 }
 
@@ -746,6 +837,17 @@ void DrawPieces(Grid* grid, Pieces* pieces) {
   }
 }
 
+void DrawHint(Grid* grid, Pieces* pieces, Moves* moves, bool hint) {
+  if (!hint) return;
+  int move_idx = FindFirstMove(moves);
+  if (move_idx<0) {
+    // printf("move not found");
+    return;
+  }
+  // printf("Gp: (%d, %d)\n", moves->arr[move_idx].pos.x, moves->arr[move_idx].pos.y);
+  DrawPiece(&pieces->arr[moves->arr[move_idx].p_idx], GridToScreen(moves->arr[move_idx].pos, grid->canvas), transparency, 1);
+}
+
 void DrawScore(Grid* grid, Score* score) {
   const char* score_text = TextFormat("%d", score->val);
   const char* temp_score_text = TextFormat(" +%d", score->temp_score);
@@ -802,7 +904,7 @@ void OnMouseClick(Pieces* pieces) {
   }
 }
 
-bool OnMouseRelease(Grid* grid, Pieces* pieces, int* squares_cleared) {
+bool OnMouseRelease(Grid* grid, Pieces* pieces, Moves* moves, int* squares_cleared, bool* hint) {
   bool dropped = false;
   if (!IsMouseButtonReleased(MOUSE_LEFT_BUTTON)) return dropped;
   for (int p_idx = 0; p_idx != num_pieces; p_idx++) {
@@ -811,6 +913,12 @@ bool OnMouseRelease(Grid* grid, Pieces* pieces, int* squares_cleared) {
       GridPos gpos = GetShadowPos(piece_pos, grid);
       if (DoesPieceFit(grid, &pieces->arr[p_idx], gpos)) {
         *squares_cleared = DropPiece(grid, &pieces->arr[p_idx], gpos);
+        Move move = (Move){gpos, p_idx};
+        int m_idx = FindFirstMove(moves);
+        if (EqualMove(move, moves->arr[m_idx])) {
+          moves->arr[m_idx].p_idx = -1;
+          if (m_idx==0) *hint = false;
+        }
         dropped = true;
       }
       pieces->arr[p_idx].drag.dragging = false;
@@ -821,10 +929,12 @@ bool OnMouseRelease(Grid* grid, Pieces* pieces, int* squares_cleared) {
 }
 
 void GameInit(Game* game) {
+  game->hint = false;
   game->fade = 0;
   game->score = (Score){0};
   game->grid = GridCreate();
   game->pieces = PiecesCreate();
+  game->moves = MovesCreate();
 
 #if defined(PLATFORM_DESKTOP)
   int x = GetMonitorWidth(GetCurrentMonitor()) * (1 - windowSize) / 2;
@@ -835,7 +945,7 @@ void GameInit(Game* game) {
   screen_canvas.size = (PixelSize){GetScreenWidth(), GetScreenHeight()};
   PositionCanvases(&game->grid, &game->pieces, &game->score);
   GridInit(&game->grid);
-  BuildPieces(&game->grid, &game->pieces);
+  BuildPieces(&game->grid, &game->pieces, &game->moves, game->square_probability);
   game->score.combo_timer = combo_time;
 }
 
@@ -843,17 +953,24 @@ void RenderMenu(Game* game) {
   PixelSize b_size = {GetScreenWidth() / 2, (GetScreenHeight() / 4 / ARRAY_LENGTH(menu_ops))};
   for (int b_idx = 0; b_idx != ARRAY_LENGTH(menu_ops); b_idx++) {
     MenuOp* op = &menu_ops[b_idx];
-    if (GuiButton((Rectangle){b_size.width / 2,
-                              (GetScreenHeight() - ((1 - b_idx) * b_size.height * 3)) / 2,
+    if (GuiButton((Rectangle){b_size.width / 2.0,
+                              (GetScreenHeight() - ((1 - b_idx) * b_size.height * 3)) / 2.0,
                               b_size.width, b_size.height},
                   menu_ops[b_idx].button_label)) {
       cols = op->cols;
       rows = op->rows;
       num_pieces = op->num_pieces;
       piece_length = op->piece_length;
+      game->square_probability = op->square_probability;
       GameInit(game);
       game->gstate = playing;
     }
+  }
+}
+
+void DrawHintButton(bool* hint) {
+  if (GuiButton((Rectangle){10, 10, squareLength/2.0, squareLength/2.0}, "H")) {
+    *hint = !*hint;
   }
 }
 
@@ -881,17 +998,19 @@ int main(void) {
         OnMouseClick(&game.pieces);
         UpdateCombo(&game.score);
         int squares_cleared = 0;
-        if (OnMouseRelease(&game.grid, &game.pieces, &squares_cleared)) {
+        if (OnMouseRelease(&game.grid, &game.pieces, &game.moves, &squares_cleared, &game.hint)) {
           // only check for gameover if sth actually changed
           CanPlacePiece(&game.grid, &game.pieces, &game.gstate);
         }
         UpdateScore(&game.score, squares_cleared);
-        RefillPieces(&game.grid, &game.pieces);
+        RefillPieces(&game.grid, &game.pieces, &game.moves, game.square_probability);
 
         BeginDrawing();
         ClearBackground((Color){46, 46, 46, 255});
         RenderGrid(&game.grid);
         DrawScore(&game.grid, &game.score);
+        DrawHintButton(&game.hint);
+        DrawHint(&game.grid, &game.pieces, &game.moves, game.hint);
         DrawPieces(&game.grid, &game.pieces);
         EndDrawing();
         game.score.combo_timer--;
@@ -922,6 +1041,7 @@ int main(void) {
   CloseWindow();
   // may already be freed in game over gstate, in which case double free is prevented in *Destroy
   // but in case user quit while playing or while on menu, free now.
+  MovesDestroy(&game.moves);
   GridDestroy(&game.grid);
   PiecesDestroy(&game.pieces);
   return 0;
