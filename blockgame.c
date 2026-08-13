@@ -348,7 +348,7 @@ void PositionCanvases(Grid* grid, Pieces* pieces, Score* score, Hint* hint) {
         NULL};
     Canvas* total_canvas = StackAbove(&score->canvas, StackAbove(&grid->canvas, &pieces->canvas));
     CenterCanvas(&screen_canvas, true, total_canvas, true, true, true);    
-    CenterCanvas(&hint->canvas, false, &score->canvas, false, false, true);
+    CenterCanvas(&score->canvas, false, &hint->canvas, false, false, true);
   } else {
     pieces->canvas =
         (Canvas){{0},
@@ -356,7 +356,7 @@ void PositionCanvases(Grid* grid, Pieces* pieces, Score* score, Hint* hint) {
                  NULL};
     Canvas* total_canvas = StackAbove(&score->canvas, StackLeft(&grid->canvas, &pieces->canvas));
     CenterCanvas(&screen_canvas, true, total_canvas, true, true, true);
-    CenterCanvas(&hint->canvas, false, &score->canvas, false, false, true);
+    CenterCanvas(&score->canvas, false, &hint->canvas, false, false, true);
   }
 }
 
@@ -1041,9 +1041,9 @@ int main(void) {
         } else {
           GridDestroy(&game.grid);
           PiecesDestroy(&game.pieces);
-#if defined(PLATFORM_DESKTOP)
-          SetWindowSize(800, 600);
-#endif
+// #if defined(PLATFORM_DESKTOP)
+//           SetWindowSize(800, 600);
+// #endif
           game.gstate = menu;
         }
         break;
