@@ -138,15 +138,20 @@ typedef struct Moves {
   Move* arr;
 } Moves;
 
+typedef struct Hint {
+  Canvas canvas;
+  bool hint;
+} Hint;
+
 typedef struct Game {
   Score score;
   Grid grid;
   Pieces pieces;
   Moves moves;
   gamestate gstate;
+  Hint hint;
   int fade;
   int square_probability;
-  bool hint;
 } Game;
 
 typedef struct MenuOp {
@@ -332,7 +337,8 @@ void ReCalc(void) {
 #endif
 }
 
-void PositionCanvases(Grid* grid, Pieces* pieces, Score* score) {
+void PositionCanvases(Grid* grid, Pieces* pieces, Score* score, Hint* hint) {
+  hint->canvas = (Canvas){{0}, {squareLength/2.0, squareLength/2.0}, NULL};
   score->canvas = (Canvas){{0}, GridToPixel((GridSize){cols, 1}), NULL};
   grid->canvas = (Canvas){{0}, GridToPixel((GridSize){cols, rows}), NULL};
   if (pieces_at_bottom) {
@@ -341,7 +347,8 @@ void PositionCanvases(Grid* grid, Pieces* pieces, Score* score) {
         GridToPixel((GridSize){cols, CEIL_DIV(num_pieces, pieces_per_grid_length) * piece_length}),
         NULL};
     Canvas* total_canvas = StackAbove(&score->canvas, StackAbove(&grid->canvas, &pieces->canvas));
-    CenterCanvas(&screen_canvas, true, total_canvas, true, true, true);
+    CenterCanvas(&screen_canvas, true, total_canvas, true, true, true);    
+    CenterCanvas(&hint->canvas, false, &score->canvas, false, false, true);
   } else {
     pieces->canvas =
         (Canvas){{0},
@@ -349,6 +356,7 @@ void PositionCanvases(Grid* grid, Pieces* pieces, Score* score) {
                  NULL};
     Canvas* total_canvas = StackAbove(&score->canvas, StackLeft(&grid->canvas, &pieces->canvas));
     CenterCanvas(&screen_canvas, true, total_canvas, true, true, true);
+    CenterCanvas(&hint->canvas, false, &score->canvas, false, false, true);
   }
 }
 
@@ -580,6 +588,11 @@ Move EmptyMove(void) {
   Move move = {0};
   move.p_idx = -1;
   return move;
+}
+
+Hint HintCreate(void) {
+  Hint hint = {0};
+  return hint;
 }
 
 bool EqualMove(Move m1, Move m2) {
@@ -929,7 +942,7 @@ bool OnMouseRelease(Grid* grid, Pieces* pieces, Moves* moves, int* squares_clear
 }
 
 void GameInit(Game* game) {
-  game->hint = false;
+  game->hint = HintCreate();
   game->fade = 0;
   game->score = (Score){0};
   game->grid = GridCreate();
@@ -943,7 +956,7 @@ void GameInit(Game* game) {
 #endif
   ReCalc();
   screen_canvas.size = (PixelSize){GetScreenWidth(), GetScreenHeight()};
-  PositionCanvases(&game->grid, &game->pieces, &game->score);
+  PositionCanvases(&game->grid, &game->pieces, &game->score, &game->hint);
   GridInit(&game->grid);
   BuildPieces(&game->grid, &game->pieces, &game->moves, game->square_probability);
   game->score.combo_timer = combo_time;
@@ -968,9 +981,9 @@ void RenderMenu(Game* game) {
   }
 }
 
-void DrawHintButton(bool* hint) {
-  if (GuiButton((Rectangle){10, 10, squareLength/2.0, squareLength/2.0}, "H")) {
-    *hint = !*hint;
+void DrawHintButton(Hint* hint) {
+  if (GuiButton((Rectangle){hint->canvas.origin.x, hint->canvas.origin.y, squareLength/2.0, squareLength/2.0}, "H")) {
+    hint->hint = !hint->hint;
   }
 }
 
@@ -998,7 +1011,7 @@ int main(void) {
         OnMouseClick(&game.pieces);
         UpdateCombo(&game.score);
         int squares_cleared = 0;
-        if (OnMouseRelease(&game.grid, &game.pieces, &game.moves, &squares_cleared, &game.hint)) {
+        if (OnMouseRelease(&game.grid, &game.pieces, &game.moves, &squares_cleared, &game.hint.hint)) {
           // only check for gameover if sth actually changed
           CanPlacePiece(&game.grid, &game.pieces, &game.gstate);
         }
@@ -1010,7 +1023,7 @@ int main(void) {
         RenderGrid(&game.grid);
         DrawScore(&game.grid, &game.score);
         DrawHintButton(&game.hint);
-        DrawHint(&game.grid, &game.pieces, &game.moves, game.hint);
+        DrawHint(&game.grid, &game.pieces, &game.moves, game.hint.hint);
         DrawPieces(&game.grid, &game.pieces);
         EndDrawing();
         game.score.combo_timer--;
